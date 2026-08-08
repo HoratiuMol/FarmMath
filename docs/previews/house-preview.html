@@ -1,0 +1,548 @@
+<title>Farm Building — Low-Poly Preview</title>
+<style>
+  :root {
+    --bg: #f3eee1;
+    --panel: #fbf8f0;
+    --ink: #2c2418;
+    --muted: #7a6f5c;
+    --accent: #5c8a3a;
+    --line: #e4dac4;
+    --chip-border: rgba(44, 36, 24, 0.14);
+    --canvas-ground-a: #eef3e2;
+    --canvas-ground-b: #e4ecd4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1812;
+      --panel: #24201a;
+      --ink: #f1ead9;
+      --muted: #a79a82;
+      --accent: #7fb65a;
+      --line: #362f23;
+      --chip-border: rgba(241, 234, 217, 0.14);
+      --canvas-ground-a: #262a1e;
+      --canvas-ground-b: #2c3122;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1812;
+    --panel: #24201a;
+    --ink: #f1ead9;
+    --muted: #a79a82;
+    --accent: #7fb65a;
+    --line: #362f23;
+    --chip-border: rgba(241, 234, 217, 0.14);
+    --canvas-ground-a: #262a1e;
+    --canvas-ground-b: #2c3122;
+  }
+  :root[data-theme="light"] {
+    --bg: #f3eee1;
+    --panel: #fbf8f0;
+    --ink: #2c2418;
+    --muted: #7a6f5c;
+    --accent: #5c8a3a;
+    --line: #e4dac4;
+    --chip-border: rgba(44, 36, 24, 0.14);
+    --canvas-ground-a: #eef3e2;
+    --canvas-ground-b: #e4ecd4;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .display {
+    font-family: ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .mono {
+    font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  main {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 48px 24px 72px;
+  }
+
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 36px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    line-height: 1.1;
+    margin: 0;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 62ch;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr);
+    gap: 24px;
+  }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .stage-card, .panel-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px;
+  }
+
+  .stage-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .stage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .stage-head h2 {
+    font-size: 15px;
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .stage-head .tag {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  .stage {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--canvas-ground-a);
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .stage-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .stage-controls label {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  input[type="range"] {
+    accent-color: var(--accent);
+    width: 140px;
+  }
+
+  .zoom-value {
+    font-size: 12px;
+    color: var(--ink);
+    min-width: 3ch;
+  }
+
+  .panel-card {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    height: fit-content;
+  }
+
+  .panel-card h2 {
+    font-size: 15px;
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .swatch-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .swatch-group-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .swatch-group-title:first-child {
+    margin-top: 0;
+  }
+
+  .swatch {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .chip {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    border: 1px solid var(--chip-border);
+    flex-shrink: 0;
+  }
+
+  .swatch-label {
+    font-size: 13px;
+  }
+
+  .swatch-hex {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.6;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+
+  .note code {
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-size: 11.5px;
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+  }
+
+  footer {
+    margin-top: 40px;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow display">Farm Math Builder &middot; Asset Preview</span>
+    <h1 class="display">Farm building, low-poly pass</h1>
+    <p class="subtitle">
+      A standalone render of the central 2&times;2 farm building, matching the flat-shaded
+      low-poly logic in <code>drawFarmBuilding()</code> (<code>FarmGridCanvas.kt</code>) &mdash;
+      pixel-for-pixel the same shapes, colors, and proportions, so the palette and silhouette
+      can be checked without rebuilding the Android app.
+    </p>
+  </header>
+
+  <div class="layout">
+    <section class="stage-card">
+      <div class="stage-head">
+        <h2 class="display">Isometric render</h2>
+        <span class="tag mono">2&times;2 footprint &middot; flat shaded</span>
+      </div>
+      <div class="stage">
+        <canvas id="houseCanvas" width="900" height="620"></canvas>
+      </div>
+      <div class="stage-controls">
+        <label>
+          Scale
+          <input id="scaleRange" type="range" min="0.6" max="1.6" step="0.05" value="1.1" />
+        </label>
+        <span class="zoom-value mono" id="scaleValue">1.10&times;</span>
+      </div>
+    </section>
+
+    <aside class="panel-card">
+      <div>
+        <h2 class="display">Palette</h2>
+      </div>
+
+      <div class="swatch-group">
+        <div class="swatch-group-title">Walls</div>
+        <div class="swatch">
+          <span class="chip" style="background:#f5e6c8"></span>
+          <span class="swatch-label">Wall &middot; lit face</span>
+          <span class="swatch-hex mono">#F5E6C8</span>
+        </div>
+        <div class="swatch">
+          <span class="chip" style="background:#e0cba0"></span>
+          <span class="swatch-label">Wall &middot; shadow face</span>
+          <span class="swatch-hex mono">#E0CBA0</span>
+        </div>
+      </div>
+
+      <div class="swatch-group">
+        <div class="swatch-group-title">Roof</div>
+        <div class="swatch">
+          <span class="chip" style="background:#689f38"></span>
+          <span class="swatch-label">Roof &middot; lit plane</span>
+          <span class="swatch-hex mono">#689F38</span>
+        </div>
+        <div class="swatch">
+          <span class="chip" style="background:#33691e"></span>
+          <span class="swatch-label">Roof &middot; shadow plane</span>
+          <span class="swatch-hex mono">#33691E</span>
+        </div>
+      </div>
+
+      <div class="swatch-group">
+        <div class="swatch-group-title">Trim &amp; details</div>
+        <div class="swatch">
+          <span class="chip" style="background:#4e342e"></span>
+          <span class="swatch-label">Edge trim / outline</span>
+          <span class="swatch-hex mono">#4E342E</span>
+        </div>
+        <div class="swatch">
+          <span class="chip" style="background:#3e2723"></span>
+          <span class="swatch-label">Door</span>
+          <span class="swatch-hex mono">#3E2723</span>
+        </div>
+        <div class="swatch">
+          <span class="chip" style="background:#90caf9"></span>
+          <span class="swatch-label">Window</span>
+          <span class="swatch-hex mono">#90CAF9</span>
+        </div>
+        <div class="swatch">
+          <span class="chip" style="background:#8d6e63"></span>
+          <span class="swatch-label">Foundation</span>
+          <span class="swatch-hex mono">#8D6E63</span>
+        </div>
+      </div>
+
+      <p class="note">
+        Two flat tones per surface (wall, roof) stand in for light/shadow &mdash;
+        no gradients, no texture strokes. Every polygon keeps a
+        <code>1.5&ndash;2px</code> dark edge outline, which is what reads as
+        &ldquo;low-poly&rdquo; rather than flat-and-undefined.
+      </p>
+    </aside>
+  </div>
+
+  <footer>Farm Math Builder &middot; docs/previews/house-preview.html &middot; mirrors FarmGridCanvas.kt</footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('houseCanvas');
+  const ctx = canvas.getContext('2d');
+  const scaleRange = document.getElementById('scaleRange');
+  const scaleValue = document.getElementById('scaleValue');
+
+  const palette = {
+    wallLit: '#F5E6C8',
+    wallShadow: '#E0CBA0',
+    roofLit: '#689F38',
+    roofShadow: '#33691E',
+    trim: '#4E342E',
+    door: '#3E2723',
+    window: '#90CAF9',
+    windowBorder: '#4E342E',
+    foundation: '#8D6E63',
+    foundationLine: 'rgba(0,0,0,0.18)'
+  };
+
+  function diamondPath(cx, cy, w, h) {
+    const p = new Path2D();
+    p.moveTo(cx, cy - h / 2);
+    p.lineTo(cx + w / 2, cy);
+    p.lineTo(cx, cy + h / 2);
+    p.lineTo(cx - w / 2, cy);
+    p.closePath();
+    return p;
+  }
+
+  function strokePoly(points, color, width) {
+    ctx.beginPath();
+    points.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+    ctx.closePath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  function fillPoly(points, color) {
+    ctx.beginPath();
+    points.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function drawGround() {
+    const style = getComputedStyle(document.documentElement);
+    const a = style.getPropertyValue('--canvas-ground-a').trim();
+    const b = style.getPropertyValue('--canvas-ground-b').trim();
+    ctx.fillStyle = a;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = b;
+    ctx.lineWidth = 1;
+    const step = 46;
+    for (let x = -canvas.height; x < canvas.width + canvas.height; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + canvas.height, canvas.height);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, canvas.height);
+      ctx.lineTo(x + canvas.height, 0);
+      ctx.stroke();
+    }
+  }
+
+  // Mirrors drawFarmBuilding(cx, cy, w, h, scale) in FarmGridCanvas.kt:
+  // a foundation diamond, two flat wall faces, a door, a window on each
+  // face, and two flat roof planes meeting at a ridge.
+  function drawFarmBuilding(cx, cy, w, h, scale) {
+    const outline = palette.trim;
+    const outlineW = 1.8 * scale;
+
+    // Foundation.
+    ctx.save();
+    ctx.fillStyle = palette.foundation;
+    ctx.fill(diamondPath(cx, cy, w, h));
+    ctx.strokeStyle = palette.foundationLine;
+    ctx.lineWidth = 1.5 * scale;
+    ctx.stroke(diamondPath(cx, cy, w, h));
+    ctx.restore();
+
+    const wallTop = cy - h * 0.06;
+    const wallHeight = h * 0.9 * scale;
+    const left = [cx - w / 2, wallTop];
+    const bottom = [cx, wallTop + h / 2];
+    const right = [cx + w / 2, wallTop];
+    const top = [cx, wallTop - h / 2];
+
+    const leftFace = [
+      left, bottom,
+      [bottom[0], bottom[1] - wallHeight],
+      [left[0], left[1] - wallHeight]
+    ];
+    const rightFace = [
+      bottom, right,
+      [right[0], right[1] - wallHeight],
+      [bottom[0], bottom[1] - wallHeight]
+    ];
+
+    fillPoly(leftFace, palette.wallShadow);
+    strokePoly(leftFace, outline, outlineW);
+    fillPoly(rightFace, palette.wallLit);
+    strokePoly(rightFace, outline, outlineW);
+
+    // Door, centered on the lit (right) face, sitting on the foundation line.
+    const doorW = w * 0.11;
+    const doorH = wallHeight * 0.4;
+    const doorBaseX = (bottom[0] + right[0]) / 2 + w * 0.05;
+    const doorBaseY = (bottom[1] + right[1]) / 2 - wallHeight * 0.02;
+    fillPoly([
+      [doorBaseX - doorW / 2, doorBaseY],
+      [doorBaseX + doorW / 2, doorBaseY],
+      [doorBaseX + doorW / 2, doorBaseY - doorH],
+      [doorBaseX - doorW / 2, doorBaseY - doorH]
+    ], palette.door);
+    strokePoly([
+      [doorBaseX - doorW / 2, doorBaseY],
+      [doorBaseX + doorW / 2, doorBaseY],
+      [doorBaseX + doorW / 2, doorBaseY - doorH],
+      [doorBaseX - doorW / 2, doorBaseY - doorH]
+    ], outline, 1.3 * scale);
+
+    // One flat window per wall face.
+    function window(face, flip) {
+      const midX = (face[0][0] + face[1][0]) / 2 + (flip ? -1 : 1) * w * 0.09;
+      const midY = face[0][1] - wallHeight * 0.56;
+      const ww = w * 0.1;
+      const wh = wallHeight * 0.24;
+      const pts = [
+        [midX - ww / 2, midY - wh / 2],
+        [midX + ww / 2, midY - wh / 2],
+        [midX + ww / 2, midY + wh / 2],
+        [midX - ww / 2, midY + wh / 2]
+      ];
+      fillPoly(pts, palette.window);
+      strokePoly(pts, outline, 1.3 * scale);
+    }
+    window(leftFace, true);
+    window(rightFace, false);
+
+    // Roof: two flat planes meeting at a ridge above the wall box.
+    const eaveDrop = h * 0.08;
+    const ridgeHeight = wallHeight + h * 0.62;
+    const ridgeHalfSpan = w * 0.16;
+    const apexY = top[1] - wallHeight - ridgeHeight * 0.42;
+    const ridgeFront = [cx - ridgeHalfSpan, apexY];
+    const ridgeBack = [cx + ridgeHalfSpan, apexY];
+
+    const eaveLeft = [left[0] - w * 0.09, left[1] - wallHeight + eaveDrop];
+    const eaveBottom = [bottom[0], bottom[1] - wallHeight - h * 0.1];
+    const eaveRight = [right[0] + w * 0.09, right[1] - wallHeight + eaveDrop];
+    const eaveTop = [top[0], top[1] - wallHeight - h * 0.1];
+
+    const roofLeft = [eaveLeft, eaveBottom, ridgeFront, ridgeBack, eaveTop];
+    const roofRight = [eaveBottom, eaveRight, eaveTop, ridgeBack, ridgeFront];
+
+    fillPoly(roofLeft, palette.roofShadow);
+    strokePoly(roofLeft, outline, outlineW);
+    fillPoly(roofRight, palette.roofLit);
+    strokePoly(roofRight, outline, outlineW);
+
+    // Ridge line for readability.
+    strokePoly([ridgeFront, ridgeBack], outline, 1.4 * scale);
+  }
+
+  function render() {
+    drawGround();
+    const scale = parseFloat(scaleRange.value);
+    scaleValue.textContent = scale.toFixed(2) + '×';
+    const cx = canvas.width / 2;
+    const cy = canvas.height * 0.62;
+    const w = 300 * scale;
+    const h = 168 * scale;
+    drawFarmBuilding(cx, cy, w, h, scale);
+  }
+
+  scaleRange.addEventListener('input', render);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+  render();
+</script>
