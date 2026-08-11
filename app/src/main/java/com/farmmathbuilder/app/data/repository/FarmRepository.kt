@@ -39,6 +39,16 @@ class FarmRepository(
     val player: Flow<PlayerEntity?> = playerDao.observe()
     val settings: Flow<SettingsEntity?> = settingsDao.observe()
 
+    /**
+     * Testing aid: the player's wheat currency is floored at [TEST_MIN_WHEAT]
+     * on every write, so there's always enough to freely test paid actions
+     * (e.g. expandGrid) without grinding harvests first. Remove this floor
+     * (and the ensurePlayerInitialized seed value below) once real economy
+     * balancing/testing is no longer needed.
+     */
+    private suspend fun updatePlayer(p: PlayerEntity) =
+        playerDao.update(p.copy(wheatCurrency = maxOf(p.wheatCurrency, TEST_MIN_WHEAT)))
+
     val uiCells: Flow<List<UiCell>> = cells.combine(player) { cellList, p ->
         val config = p?.let { GridConfig(it.gridCols, it.gridRows, it.buildableRadius) } ?: GridConfig.BASE
         cellList.map { it.toUiCell(config = config) }
@@ -90,8 +100,17 @@ class FarmRepository(
     }
 
     suspend fun ensurePlayerInitialized() {
-        if (playerDao.get() == null) {
-            playerDao.insert(PlayerEntity(lastDailyResetTimestamp = System.currentTimeMillis()))
+        val existing = playerDao.get()
+        if (existing == null) {
+            playerDao.insert(
+                PlayerEntity(lastDailyResetTimestamp = System.currentTimeMillis(), wheatCurrency = TEST_MIN_WHEAT)
+            )
+        } else if (existing.wheatCurrency < TEST_MIN_WHEAT) {
+            // Top up saves from before the test-wheat floor existed (or any save
+            // that predates it) — updatePlayer() only floors on the *next*
+            // mutating write, so an untouched existing save would otherwise sit
+            // at its old wheatCurrency (e.g. 0) until the player harvests/plants.
+            updatePlayer(existing)
         }
     }
 
@@ -116,7 +135,7 @@ class FarmRepository(
         val now = System.currentTimeMillis()
         if (isSameLocalDay(current.lastDailyResetTimestamp, now)) return false
 
-        playerDao.update(
+        updatePlayer(
             current.copy(
                 freeFieldsUsedToday = 0,
                 extraFieldsEarnedToday = 0,
@@ -162,7 +181,7 @@ class FarmRepository(
             )
         )
 
-        playerDao.update(
+        updatePlayer(
             p.copy(
                 freeFieldsUsedToday = if (slotType == "FREE") p.freeFieldsUsedToday + 1 else p.freeFieldsUsedToday,
                 extraFieldsUsedToday = if (slotType == "EXTRA") p.extraFieldsUsedToday + 1 else p.extraFieldsUsedToday
@@ -187,7 +206,7 @@ class FarmRepository(
             "EXTRA" -> p.copy(extraFieldsUsedToday = (p.extraFieldsUsedToday - 1).coerceAtLeast(0))
             else -> p
         }
-        playerDao.update(restoredPlayer)
+        updatePlayer(restoredPlayer)
 
         cellDao.update(
             cell.copy(
@@ -208,7 +227,7 @@ class FarmRepository(
         if (phase != GrowthPhase.MATURE) return false
 
         val p = playerDao.get() ?: return false
-        playerDao.update(
+        updatePlayer(
             p.copy(
                 wheatCurrency = p.wheatCurrency + 5,
                 fieldsCompletedTotal = p.fieldsCompletedTotal + 1,
@@ -224,6 +243,36 @@ class FarmRepository(
             )
         )
         return true
+    }
+
+    /** Harvests every currently-mature cell in one batch (single player update, one cell write per cell). Returns how many were harvested. */
+    suspend fun harvestAll(): Int {
+        val now = System.currentTimeMillis()
+        val matureCells = cellDao.getAll().filter {
+            it.occupantType == OccupantType.WHEAT &&
+                GrowthCalculator.computePhase(it.plantedAtTimestamp, it.growthDurationMs, now) == GrowthPhase.MATURE
+        }
+        if (matureCells.isEmpty()) return 0
+
+        val p = playerDao.get() ?: return 0
+        updatePlayer(
+            p.copy(
+                wheatCurrency = p.wheatCurrency + 5 * matureCells.size,
+                fieldsCompletedTotal = p.fieldsCompletedTotal + matureCells.size,
+                pathTypesUnlocked = (p.pathTypesUnlocked + matureCells.size).coerceAtMost(PathType.entries.size)
+            )
+        )
+        matureCells.forEach { cell ->
+            cellDao.update(
+                cell.copy(
+                    occupantType = OccupantType.EMPTY,
+                    plantedAtTimestamp = 0L,
+                    growthDurationMs = 0L,
+                    consumedSlotType = null
+                )
+            )
+        }
+        return matureCells.size
     }
 
     /** FR-030/031/032 (Should): place a path segment on an empty, in-radius cell. Free, no confirmation. */
@@ -295,7 +344,7 @@ class FarmRepository(
 
         cellDao.replaceAll(shiftedCells + newBorderCells)
 
-        playerDao.update(
+        updatePlayer(
             p.copy(
                 wheatCurrency = p.wheatCurrency - cost,
                 gridCols = newCols,
@@ -326,7 +375,7 @@ class FarmRepository(
 
     suspend fun recordExerciseResult(correct: Boolean) {
         val p = playerDao.get() ?: return
-        playerDao.update(
+        updatePlayer(
             if (correct) {
                 p.copy(
                     extraFieldsEarnedToday = p.extraFieldsEarnedToday + 1,
@@ -344,7 +393,7 @@ class FarmRepository(
 
     suspend fun setAgeBand(ageBand: AgeBand) {
         val p = playerDao.get() ?: return
-        playerDao.update(p.copy(ageBand = ageBand))
+        updatePlayer(p.copy(ageBand = ageBand))
     }
 
     suspend fun updateSettings(mutator: (SettingsEntity) -> SettingsEntity) {
@@ -353,4 +402,8 @@ class FarmRepository(
     }
 
     suspend fun currentPlayer(): PlayerEntity? = player.first()
+
+    companion object {
+        const val TEST_MIN_WHEAT = 100
+    }
 }

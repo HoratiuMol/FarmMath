@@ -137,6 +137,17 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         }
     }
 
+    /** Harvests every currently-mature cell in one action. */
+    fun harvestAll() {
+        viewModelScope.launch {
+            val lastMatureCellId = _uiState.value.cells.lastOrNull { it.isMature }?.id
+            val harvestedCount = repository.harvestAll()
+            if (harvestedCount > 0 && lastMatureCellId != null) {
+                _uiState.value = _uiState.value.copy(showHarvestCelebrationForCellId = lastMatureCellId)
+            }
+        }
+    }
+
     fun clearHarvestCelebration() {
         _uiState.value = _uiState.value.copy(showHarvestCelebrationForCellId = null)
     }

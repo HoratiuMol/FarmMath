@@ -1,6 +1,8 @@
 package com.farmmathbuilder.app.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -22,6 +24,7 @@ import com.farmmathbuilder.app.ui.components.ConfettiOverlay
 import com.farmmathbuilder.app.ui.components.ExpandMapButton
 import com.farmmathbuilder.app.ui.components.FabColumn
 import com.farmmathbuilder.app.ui.components.FarmGridCanvas
+import com.farmmathbuilder.app.ui.components.HarvestAllButton
 import com.farmmathbuilder.app.ui.components.MathExerciseDialog
 import com.farmmathbuilder.app.ui.components.StatsDialog
 import com.farmmathbuilder.app.ui.components.TopHud
@@ -67,10 +70,21 @@ fun FarmScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            TopHud(
-                player = uiState.player,
-                modifier = Modifier.align(Alignment.TopStart)
-            )
+            val matureCount = uiState.cells.count { it.isMature }
+            Column(
+                modifier = Modifier.align(Alignment.TopStart),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TopHud(player = uiState.player)
+
+                if (matureCount > 0) {
+                    HarvestAllButton(
+                        matureCount = matureCount,
+                        onClick = { viewModel.harvestAll() },
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+            }
 
             FabColumn(
                 onMathClick = { viewModel.openExercise() },

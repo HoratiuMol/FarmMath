@@ -46,8 +46,16 @@ object GridMath {
         return max(abs(col - bc), abs(row - br))
     }
 
+    /** True for the outermost ring of the grid array — this is exactly where the
+     * boundary fence is drawn (see FarmGridCanvas), so it's never buildable. */
+    fun isOnGridBorder(col: Int, row: Int, cols: Int, rows: Int): Boolean =
+        col == 0 || row == 0 || col == cols - 1 || row == rows - 1
+
+    /** Buildable = within radius of the building AND not on the fenced-off border
+     * ring, so the playable area is always contained by the fence on all 4 sides
+     * regardless of how asymmetric cols/rows/building position are. */
     fun isWithinBuildableRadius(col: Int, row: Int, cols: Int, rows: Int, radius: Int): Boolean =
-        distanceFromBuilding(col, row, cols, rows) <= radius
+        distanceFromBuilding(col, row, cols, rows) <= radius && !isOnGridBorder(col, row, cols, rows)
 
     /** Isometric screen-space projection (unscaled, tile-unit space). */
     fun isoX(col: Number, row: Number, tileWidth: Float): Float =

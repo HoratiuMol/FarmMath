@@ -6,19 +6,24 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale as drawScale
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -58,6 +63,80 @@ fun FarmGridCanvas(
     val context = LocalContext.current
     val barnTriangles = remember { BarnMesh.load(context) }
     val fenceVariants = remember { FenceMesh.load(context) }
+
+    // Decorative wandering cow (not tappable, no gameplay effect): a free-floating
+    // col/row position animated by its own coroutine, independent of the cell grid.
+    // -1f is an "uninitialized" sentinel (valid col/row are always >= 0).
+    var cowCol by remember { mutableFloatStateOf(-1f) }
+    var cowRow by remember { mutableFloatStateOf(-1f) }
+    var cowFacingRight by remember { mutableStateOf(true) }
+    var cowAnimMs by remember { mutableFloatStateOf(0f) }
+    var prevGridConfigForCow by remember { mutableStateOf<GridConfig?>(null) }
+
+    LaunchedEffect(gridConfig) {
+        // expandGrid() shifts every existing cell by +1 col/+1 row to keep the
+        // building centered (see FarmRepository.expandGrid) — shift the cow's
+        // free-floating position the same way so it doesn't visually teleport
+        // relative to the barn/fence when the map grows.
+        prevGridConfigForCow?.let { prev ->
+            if (gridConfig.cols != prev.cols) {
+                val shift = (gridConfig.cols - prev.cols) / 2f
+                cowCol += shift
+                cowRow += shift
+            }
+        }
+        prevGridConfigForCow = gridConfig
+
+        fun randomWanderTarget(): Offset {
+            while (true) {
+                val col = Random.nextInt(gridConfig.cols)
+                val row = Random.nextInt(gridConfig.rows)
+                if (GridMath.isWithinBuildableRadius(col, row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius) &&
+                    !GridMath.isBuildingCell(col, row, gridConfig.cols, gridConfig.rows)
+                ) {
+                    return Offset(col.toFloat(), row.toFloat())
+                }
+            }
+        }
+
+        if (cowCol < 0f) {
+            val start = randomWanderTarget()
+            cowCol = start.x
+            cowRow = start.y
+        }
+
+        while (true) {
+            // "Graze" pause between walks, ticking the anim clock so the tail/legs
+            // keep a subtle idle sway instead of freezing.
+            var frameMs = withFrameMillis { it }
+            val pauseUntilMs = frameMs + Random.nextInt(800, 2400)
+            while (frameMs < pauseUntilMs) {
+                cowAnimMs = frameMs.toFloat()
+                frameMs = withFrameMillis { it }
+            }
+
+            val target = randomWanderTarget()
+            val startCol = cowCol
+            val startRow = cowRow
+            val dCol = target.x - startCol
+            val dRow = target.y - startRow
+            val dist = hypot(dCol, dRow)
+            if (dist < 0.05f) continue
+            cowFacingRight = dCol >= 0f
+
+            val tilesPerMs = 0.5f / 1000f
+            val durationMs = dist / tilesPerMs
+            val moveStartMs = frameMs
+            while (true) {
+                frameMs = withFrameMillis { it }
+                cowAnimMs = frameMs.toFloat()
+                val t = ((frameMs - moveStartMs) / durationMs).coerceIn(0f, 1f)
+                cowCol = startCol + dCol * t
+                cowRow = startRow + dRow * t
+                if (t >= 1f) break
+            }
+        }
+    }
 
     val textPaint = remember {
         Paint().apply {
@@ -111,6 +190,13 @@ fun FarmGridCanvas(
         val buildingAnchorCol = GridMath.buildingAnchorCol(gridConfig.cols)
         val buildingAnchorRow = GridMath.buildingAnchorRow(gridConfig.rows)
 
+        // Continuous ground plane covering the entire visible canvas (unaffected by
+        // scale/pan — drawn once in raw canvas coordinates), so panning/zooming never
+        // reveals empty space around the grid: the barn and every crop always sit on
+        // green ground. The fence (drawn last, below) is now the only visual cue for
+        // where the buildable/playable area actually ends.
+        drawRect(color = Color(0xFF9CCC65), size = size)
+
         for (cell in cells.sortedBy { it.col + it.row }) {
             val baseCx = originOffset.x + GridMath.isoX(cell.col, cell.row, tileW)
             val baseCy = originOffset.y + GridMath.isoY(cell.col, cell.row, tileH)
@@ -121,9 +207,10 @@ fun FarmGridCanvas(
 
             val fillColor = when {
                 cell.isBuildingCell -> Color(0xFFD84315)
-                !cell.isWithinBuildableRadius -> Color(0xFF9E9E9E)
                 cell.occupantType == OccupantType.PATH -> Color(0xFFBCAAA4)
                 cell.occupantType == OccupantType.WHEAT -> Color(0xFFDCEDC8)
+                // Beyond the buildable radius reads as the same green ground as everywhere
+                // else now (was a distinct grey) — the fence alone marks the true limit.
                 else -> Color(0xFF9CCC65)
             }
 
@@ -202,27 +289,57 @@ fun FarmGridCanvas(
             }
         }
 
+        // Decorative wandering cow: purely cosmetic, not part of `cells` and never
+        // hit-tested (see the tap handler above, which only ever iterates `cells`).
+        // Position is driven by the free-floating cowCol/cowRow coroutine above.
+        // Drawn after the barn (in front of it always, rather than true depth
+        // sorting against the barn mesh — an acceptable simplification for a
+        // small roaming decoration) and before the fence, which the cow can
+        // never reach anyway since its wander targets are restricted to
+        // isWithinBuildableRadius cells, the same interior area the fence encloses.
+        if (cowCol >= 0f) {
+            val cowBaseCx = originOffset.x + GridMath.isoX(cowCol, cowRow, tileW)
+            val cowBaseCy = originOffset.y + GridMath.isoY(cowCol, cowRow, tileH)
+            val ccx = (cowBaseCx - canvasCenter.x) * scale + canvasCenter.x + pan.x
+            val ccy = (cowBaseCy - canvasCenter.y) * scale + canvasCenter.y + pan.y
+            val walkPhase = cowAnimMs / 140f
+            val stride = kotlin.math.sin(walkPhase)
+            val bob = kotlin.math.abs(stride) * 3f
+            val cowUnitScale = (tileW * scale) / 46f
+            drawWanderingCow(
+                cx = ccx,
+                cy = ccy - 18f * cowUnitScale,
+                unitScale = cowUnitScale,
+                facingRight = cowFacingRight,
+                stride = stride,
+                bob = bob
+            )
+        }
+
         // Decorative fence lining the buildable-area boundary: one precomputed
-        // fence module (see FenceMesh) per cell on the ring *just outside* the
-        // buildable Chebyshev-disk area (radius + 1 — the nearest locked/
-        // unreachable ring), so the fence marks the true limit of where the
-        // player can act instead of sitting on a tappable/buildable cell
-        // (distance == radius is still inside isWithinBuildableRadius's
-        // <= comparison). Recomputed live from gridConfig so it follows map
-        // expansion automatically (no persistence needed). Drawn last, same
-        // "draw on top" reasoning as the barn above, in its own pass over the
-        // full grid rather than the main per-cell loop.
+        // fence module (see FenceMesh) per cell on the grid's own outermost
+        // ring (col/row == 0 or cols-1/rows-1), i.e. the true edge of the
+        // cols x rows array, not a Chebyshev-distance ring from the building.
+        // The building sits off-center for non-square grids (see
+        // buildingAnchorCol/Row), so a fixed-radius ring can miss whole sides
+        // (e.g. never reach row 0) — hugging the literal grid border instead
+        // guarantees the fence always closes off all 4 sides. GridMath.
+        // isWithinBuildableRadius excludes this same border ring, so the fence
+        // always marks the true limit of where the player can act. Recomputed
+        // live from gridConfig so it follows map expansion automatically (no
+        // persistence needed). Drawn last, same "draw on top" reasoning as the
+        // barn above, in its own pass over the full grid rather than the main
+        // per-cell loop.
         run {
-            val fenceRingDistance = gridConfig.buildableRadius + 1
             for (col in 0 until gridConfig.cols) {
                 for (row in 0 until gridConfig.rows) {
-                    if (GridMath.distanceFromBuilding(col, row, gridConfig.cols, gridConfig.rows) != fenceRingDistance) continue
-                    // Top/bottom edges of the ring vary by column (row pinned at
-                    // an extreme) -> use the "runs along columns" variant.
-                    // Left/right edges vary by row -> use "runs along rows".
-                    // Corners satisfy both; alongColumns is picked consistently
-                    // for them (no mitering).
-                    val isColumnEdge = row == buildingAnchorRow - fenceRingDistance || row == buildingAnchorRow + fenceRingDistance
+                    if (!GridMath.isOnGridBorder(col, row, gridConfig.cols, gridConfig.rows)) continue
+                    // Top/bottom edges vary by column (row pinned at an extreme)
+                    // -> use the "runs along columns" variant. Left/right edges
+                    // vary by row -> use "runs along rows". Corners satisfy
+                    // both; alongColumns is picked consistently for them (no
+                    // mitering).
+                    val isColumnEdge = row == 0 || row == gridConfig.rows - 1
                     val variant = if (isColumnEdge) fenceVariants.alongColumns else fenceVariants.alongRows
                     val fBaseCx = originOffset.x + GridMath.isoX(col, row, tileW)
                     val fBaseCy = originOffset.y + GridMath.isoY(col, row, tileH)
@@ -246,6 +363,103 @@ fun FarmGridCanvas(
                 }
             }
         }
+    }
+}
+
+/**
+ * The "chibi sticker" cow design (option B of docs/previews/cow-preview.html),
+ * ported 1:1 from that preview's `drawCowB` canvas routine: rounded 2D shapes
+ * (no mesh/3D), all offsets tuned against that preview's 46px reference tile
+ * width, so [unitScale] should be `(tileWidthPx * zoomScale) / 46f` — the same
+ * "1 tile-width = 1 unit" convention BarnMesh/FenceMesh triangles use. [cx]/[cy]
+ * is the shoulder/back anchor point (not the feet); [stride] and [bob] are the
+ * walk-cycle inputs (leg-swing weight and vertical bounce), both continuous
+ * functions of the anim clock so the cow keeps a subtle idle sway even while
+ * paused between walks.
+ */
+private fun DrawScope.drawWanderingCow(
+    cx: Float,
+    cy: Float,
+    unitScale: Float,
+    facingRight: Boolean,
+    stride: Float,
+    bob: Float
+) {
+    val ink = Color(0xFF3A332B)
+    val cream = Color(0xFFFFFAF0)
+    val snoutColor = Color(0xFFF4B8AB)
+    val hornColor = Color(0xFFD8C9A3)
+
+    fun u(v: Float) = v * unitScale
+
+    val anchor = Offset(cx, cy - u(bob))
+    val legSwing = u(stride * 6f)
+
+    val draw: DrawScope.() -> Unit = {
+        // legs
+        drawLine(ink, anchor + Offset(u(-14f), u(14f)), anchor + Offset(u(-14f) + legSwing, u(26f)), strokeWidth = u(3f), cap = StrokeCap.Round)
+        drawLine(ink, anchor + Offset(u(10f), u(14f)), anchor + Offset(u(10f) - legSwing, u(26f)), strokeWidth = u(3f), cap = StrokeCap.Round)
+
+        // body
+        val bodyCenter = anchor + Offset(u(-4f), u(4f))
+        drawOval(cream, topLeft = bodyCenter - Offset(u(26f), u(17f)), size = Size(u(52f), u(34f)))
+        drawOval(ink, topLeft = bodyCenter - Offset(u(26f), u(17f)), size = Size(u(52f), u(34f)), style = Stroke(u(2f)))
+
+        // spots
+        rotate(degrees = 23f, pivot = anchor + Offset(u(-14f), u(0f))) {
+            drawOval(ink, topLeft = anchor + Offset(u(-20f), u(-4.5f)), size = Size(u(12f), u(9f)))
+        }
+        rotate(degrees = -17f, pivot = anchor + Offset(u(6f), u(9f))) {
+            drawOval(ink, topLeft = anchor + Offset(u(1f), u(5.5f)), size = Size(u(10f), u(7f)))
+        }
+
+        // head
+        val headCenter = anchor + Offset(u(24f), u(-8f))
+        drawOval(cream, topLeft = headCenter - Offset(u(17f), u(15f)), size = Size(u(34f), u(30f)))
+        drawOval(ink, topLeft = headCenter - Offset(u(17f), u(15f)), size = Size(u(34f), u(30f)), style = Stroke(u(2f)))
+
+        // ears
+        rotate(degrees = 34f, pivot = anchor + Offset(u(15f), u(-21f))) {
+            drawOval(cream, topLeft = anchor + Offset(u(9f), u(-25f)), size = Size(u(12f), u(8f)))
+            drawOval(ink, topLeft = anchor + Offset(u(9f), u(-25f)), size = Size(u(12f), u(8f)), style = Stroke(u(2f)))
+        }
+        rotate(degrees = -34f, pivot = anchor + Offset(u(30f), u(-22f))) {
+            drawOval(cream, topLeft = anchor + Offset(u(24f), u(-26f)), size = Size(u(12f), u(8f)))
+            drawOval(ink, topLeft = anchor + Offset(u(24f), u(-26f)), size = Size(u(12f), u(8f)), style = Stroke(u(2f)))
+        }
+
+        // snout
+        val snoutCenter = anchor + Offset(u(32f), u(-2f))
+        drawOval(snoutColor, topLeft = snoutCenter - Offset(u(9f), u(7f)), size = Size(u(18f), u(14f)))
+        drawOval(ink, topLeft = snoutCenter - Offset(u(9f), u(7f)), size = Size(u(18f), u(14f)), style = Stroke(u(1.5f)))
+
+        // nostrils
+        drawCircle(ink, radius = u(1.3f), center = anchor + Offset(u(29f), u(-2f)))
+        drawCircle(ink, radius = u(1.3f), center = anchor + Offset(u(35f), u(-2f)))
+
+        // eyes
+        drawCircle(ink, radius = u(2.6f), center = anchor + Offset(u(20f), u(-12f)))
+        drawCircle(ink, radius = u(2.6f), center = anchor + Offset(u(30f), u(-13f)))
+
+        // horns
+        drawLine(hornColor, anchor + Offset(u(18f), u(-23f)), anchor + Offset(u(15f), u(-28f)), strokeWidth = u(3f), cap = StrokeCap.Round)
+        drawLine(hornColor, anchor + Offset(u(27f), u(-24f)), anchor + Offset(u(29f), u(-29f)), strokeWidth = u(3f), cap = StrokeCap.Round)
+
+        // tail
+        val tailPath = Path().apply {
+            moveTo(anchor.x + u(-28f), anchor.y)
+            quadraticTo(
+                anchor.x + u(-36f), anchor.y + u(4f + stride * 3f),
+                anchor.x + u(-34f), anchor.y + u(14f)
+            )
+        }
+        drawPath(tailPath, color = ink, style = Stroke(width = u(2.5f), cap = StrokeCap.Round))
+    }
+
+    if (facingRight) {
+        draw()
+    } else {
+        drawScale(scaleX = -1f, scaleY = 1f, pivot = anchor, draw)
     }
 }
 

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.OpenInFull
@@ -139,6 +140,23 @@ fun FabColumn(
             Icon(Icons.Filled.Settings, contentDescription = "Settings")
         }
     }
+}
+
+/** Harvests every currently-mature cell at once; only shown when there's at least one ready. */
+@Composable
+fun HarvestAllButton(
+    matureCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        modifier = modifier,
+        containerColor = WheatGold,
+        contentColor = SoilBrown,
+        icon = { Icon(Icons.Filled.Agriculture, contentDescription = "Harvest all") },
+        text = { Text("Harvest all ($matureCount)", fontWeight = FontWeight.Bold) }
+    )
 }
 
 /** Map expansion (founder request): grows the grid one ring at a cost of wheat currency. */

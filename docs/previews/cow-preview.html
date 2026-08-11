@@ -1,0 +1,468 @@
+<title>Farm Cow — Design Options</title>
+<style>
+  :root {
+    --bg: #f3eee1; --panel: #fbf8f0; --ink: #2c2418; --muted: #7a6f5c;
+    --accent: #5c8a3a; --line: #e4dac4;
+    --ground-a: #9CCC65; --ground-b: #8fc158;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1812; --panel: #24201a; --ink: #f1ead9; --muted: #a79a82;
+      --accent: #7fb65a; --line: #362f23;
+      --ground-a: #4f7a36; --ground-b: #466c30;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1812; --panel: #24201a; --ink: #f1ead9; --muted: #a79a82;
+    --accent: #7fb65a; --line: #362f23;
+    --ground-a: #4f7a36; --ground-b: #466c30;
+  }
+  :root[data-theme="light"] {
+    --bg: #f3eee1; --panel: #fbf8f0; --ink: #2c2418; --muted: #7a6f5c;
+    --accent: #5c8a3a; --line: #e4dac4;
+    --ground-a: #9CCC65; --ground-b: #8fc158;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 40px 24px 64px; }
+  header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  h1 { font-size: clamp(26px, 4vw, 34px); line-height: 1.1; margin: 0; font-weight: 700; text-wrap: balance; }
+  .subtitle { color: var(--muted); font-size: 14.5px; max-width: 70ch; line-height: 1.55; margin: 0; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .card-head h2 { font-size: 15px; margin: 0; font-weight: 700; }
+  .letter {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-size: 12px; font-weight: 700; margin-right: 8px;
+  }
+  .desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0; }
+  .stage {
+    border-radius: 10px; overflow: hidden; border: 1px solid var(--line);
+  }
+  canvas { display: block; width: 100%; height: auto; }
+  .note {
+    font-size: 12.5px; color: var(--muted); line-height: 1.6;
+    border-top: 1px solid var(--line); padding-top: 14px; margin-top: 28px;
+  }
+  footer { margin-top: 20px; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Farm Math Builder &middot; Asset Preview</span>
+    <h1>Farm cow, design options</h1>
+    <p class="subtitle">
+      Four directions for the wandering, non-interactive cow (decoration only —
+      no tap target, no gameplay effect). Each one auto-walks back and forth
+      on a small patch of the game's actual ground green so you can judge scale,
+      readability at tile size, and how the walk cycle reads. Pick a letter and
+      I'll build it into the real game.
+    </p>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-head"><h2><span class="letter">A</span>Low-poly 3D</h2></div>
+      <p class="desc">Flat-shaded cuboid mesh, same camera/shading recipe as the barn and fence (BarnMesh/FenceMesh) — most visually consistent with the rest of the farm, and the easiest to port 1:1 into Kotlin since it's just more cuboids, no new pipeline.</p>
+      <div class="stage"><canvas id="cA" width="360" height="220"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2><span class="letter">B</span>Chibi sticker</h2></div>
+      <p class="desc">Big rounded head, soft body, oversized eyes — a cute 2D cartoon sprite. Reads friendliest for a kids' math app, but is a different visual language than the barn/fence's low-poly 3D.</p>
+      <div class="stage"><canvas id="cB" width="360" height="220"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2><span class="letter">C</span>Pixel art</h2></div>
+      <p class="desc">Small retro pixel sprite, two-frame walk cycle. Very cheap to render (no shape math, just a color grid), but is a third distinct visual language next to the 3D buildings and the 2D crop tiles.</p>
+      <div class="stage"><canvas id="cC" width="360" height="220"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2><span class="letter">D</span>Flat paper-cutout</h2></div>
+      <p class="desc">Geometric flat-color shapes with a soft drop shadow, no outlines — same "flat" spirit as the crop-tile art (drawWheatTile) rather than the 3D barn. Minimal, calm, quick to scan at small size.</p>
+      <div class="stage"><canvas id="cD" width="360" height="220"></canvas></div>
+    </div>
+  </div>
+
+  <p class="note">
+    All four walk on a loop within a fixed patch — this is only a design/scale
+    preview, not the real wander logic (the shipped version will roam a wider
+    area of the buildable grid on a timer-driven path, still non-interactive).
+  </p>
+  <footer>Farm Math Builder — internal asset preview, not shipped UI</footer>
+</main>
+
+<script>
+"use strict";
+
+// ---------- Shared iso ground patch ----------
+const TILE_W = 46, TILE_H = 25;
+
+function isoXY(gx, gy) {
+  return { x: (gx - gy) * TILE_W / 2, y: (gx + gy) * TILE_H / 2 };
+}
+
+function drawGround(ctx, cx, cy, cols, rows, colorA, colorB) {
+  for (let gy = 0; gy < rows; gy++) {
+    for (let gx = 0; gx < cols; gx++) {
+      const ox = gx - (cols - 1) / 2;
+      const oy = gy - (rows - 1) / 2;
+      const p = isoXY(ox, oy);
+      const x = cx + p.x, y = cy + p.y;
+      ctx.beginPath();
+      ctx.moveTo(x, y - TILE_H / 2);
+      ctx.lineTo(x + TILE_W / 2, y);
+      ctx.lineTo(x, y + TILE_H / 2);
+      ctx.lineTo(x - TILE_W / 2, y);
+      ctx.closePath();
+      ctx.fillStyle = (gx + gy) % 2 === 0 ? colorA : colorB;
+      ctx.fill();
+    }
+  }
+}
+
+function groundColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return [cs.getPropertyValue("--ground-a").trim(), cs.getPropertyValue("--ground-b").trim()];
+}
+
+// Shared walk-cycle driver: ping-pongs t in [-1, 1], returns {sx, sy, facingRight, stride, bob}
+function walkState(timeMs, periodMs, ampX, ampY) {
+  const t = (timeMs % (periodMs * 2)) / periodMs; // 0..2
+  const tri = t < 1 ? t : 2 - t; // 0..1..0 triangle wave
+  const eased = tri; // linear is fine for a preview
+  const dir = t < 1 ? 1 : -1; // moving right during first half
+  const sx = (eased - 0.5) * 2 * ampX;
+  const sy = sx * (ampY / ampX);
+  const stride = Math.sin(timeMs / 140);
+  const bob = Math.abs(Math.sin(timeMs / 140)) * 3;
+  return { sx, sy, facingRight: dir > 0, stride, bob };
+}
+
+// ---------- A: Low-poly 3D cuboid cow ----------
+function isoPt(fx, fy, fz, unit, heightUnit) {
+  return { x: (fx - fy) * unit / 2, y: (fx + fy) * unit / 4 - fz * heightUnit };
+}
+
+function shade(hex, factor) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = Math.max(0, Math.min(255, Math.round(r * factor)));
+  g = Math.max(0, Math.min(255, Math.round(g * factor)));
+  b = Math.max(0, Math.min(255, Math.round(b * factor)));
+  return `rgb(${r},${g},${b})`;
+}
+
+function drawCuboid(ctx, ox, oy, x0, y0, z0, w, d, h, unit, heightUnit, color) {
+  const p1 = isoPt(x0, y0, z0 + h, unit, heightUnit);
+  const p2 = isoPt(x0 + w, y0, z0 + h, unit, heightUnit);
+  const p3 = isoPt(x0 + w, y0 + d, z0 + h, unit, heightUnit);
+  const p4 = isoPt(x0, y0 + d, z0 + h, unit, heightUnit);
+  const p5 = isoPt(x0 + w, y0, z0, unit, heightUnit);
+  const p6 = isoPt(x0 + w, y0 + d, z0, unit, heightUnit);
+  const p7 = isoPt(x0, y0 + d, z0, unit, heightUnit);
+
+  function poly(pts, fill) {
+    ctx.beginPath();
+    ctx.moveTo(ox + pts[0].x, oy + pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(ox + pts[i].x, oy + pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  poly([p2, p5, p6, p3], shade(color, 0.72)); // right/east face
+  poly([p4, p3, p6, p7], shade(color, 0.52)); // left/south face
+  poly([p1, p2, p3, p4], shade(color, 1.0));  // top face
+}
+
+function drawCowA(ctx, ox, oy, walk) {
+  const unit = 130, heightUnit = 150;
+  const legLift = Math.max(0, walk.stride) * 0.05;
+  const legLift2 = Math.max(0, -walk.stride) * 0.05;
+  const bodyColor = "#f6efdd";
+  const legColor = "#3a332b";
+  const headColor = "#f6efdd";
+
+  const parts = [
+    // legs (back-left, back-right, front-left, front-right)
+    { x0: -0.32, y0: -0.16, z0: 0.02 + legLift, w: 0.08, d: 0.09, h: 0.22, c: legColor },
+    { x0: -0.32, y0: 0.07, z0: 0.02 + legLift2, w: 0.08, d: 0.09, h: 0.22, c: legColor },
+    { x0: 0.2, y0: -0.16, z0: 0.02 + legLift2, w: 0.08, d: 0.09, h: 0.22, c: legColor },
+    { x0: 0.2, y0: 0.07, z0: 0.02 + legLift, w: 0.08, d: 0.09, h: 0.22, c: legColor },
+    // body
+    { x0: -0.4, y0: -0.2, z0: 0.24, w: 0.68, d: 0.4, h: 0.32, c: bodyColor },
+    // head
+    { x0: 0.28, y0: -0.09, z0: 0.34, w: 0.22, d: 0.18, h: 0.22, c: headColor },
+    // snout
+    { x0: 0.46, y0: -0.06, z0: 0.34, w: 0.1, d: 0.12, h: 0.12, c: "#e8b4a8" },
+    // ears
+    { x0: 0.3, y0: -0.14, z0: 0.52, w: 0.08, d: 0.05, h: 0.05, c: bodyColor },
+    { x0: 0.3, y0: 0.09, z0: 0.52, w: 0.08, d: 0.05, h: 0.05, c: bodyColor },
+    // tail
+    { x0: -0.42, y0: -0.03, z0: 0.28, w: 0.06, d: 0.06, h: 0.16, c: legColor },
+  ];
+
+  for (const p of parts) {
+    drawCuboid(ctx, ox, oy, p.x0, p.y0, p.z0, p.w, p.d, p.h, unit, heightUnit, p.c);
+  }
+
+  // flat black patch decals on the body (cheap 2D overlay, good enough for a preview)
+  const bodyCenter = isoPt(-0.1, 0, 0.56, unit, heightUnit);
+  ctx.fillStyle = "rgba(35,30,24,0.85)";
+  ctx.beginPath();
+  ctx.ellipse(ox + bodyCenter.x - 10, oy + bodyCenter.y, 16, 10, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(ox + bodyCenter.x + 20, oy + bodyCenter.y + 6, 11, 7, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ---------- B: Chibi sticker cow ----------
+function drawCowB(ctx, ox, oy, walk) {
+  ctx.save();
+  ctx.translate(ox, oy - walk.bob);
+  if (!walk.facingRight) ctx.scale(-1, 1);
+
+  const legSwing = walk.stride * 6;
+
+  ctx.strokeStyle = "#3a332b";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  // legs
+  ctx.beginPath(); ctx.moveTo(-14, 14); ctx.lineTo(-14 + legSwing, 26); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(10, 14); ctx.lineTo(10 - legSwing, 26); ctx.stroke();
+
+  // body
+  ctx.fillStyle = "#fffaf0";
+  ctx.beginPath();
+  ctx.ellipse(-4, 4, 26, 17, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#3a332b"; ctx.lineWidth = 2; ctx.stroke();
+
+  // spots
+  ctx.fillStyle = "#3a332b";
+  ctx.beginPath(); ctx.ellipse(-14, 0, 6, 4.5, 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(6, 9, 5, 3.5, -0.3, 0, Math.PI * 2); ctx.fill();
+
+  // head (big, chibi proportions)
+  ctx.fillStyle = "#fffaf0";
+  ctx.beginPath();
+  ctx.ellipse(24, -8, 17, 15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#3a332b"; ctx.lineWidth = 2; ctx.stroke();
+
+  // ears
+  ctx.fillStyle = "#fffaf0";
+  ctx.beginPath(); ctx.ellipse(15, -21, 6, 4, 0.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(30, -22, 6, 4, -0.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  // snout
+  ctx.fillStyle = "#f4b8ab";
+  ctx.beginPath();
+  ctx.ellipse(32, -2, 9, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#3a332b"; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // nostrils
+  ctx.fillStyle = "#3a332b";
+  ctx.beginPath(); ctx.ellipse(29, -2, 1.3, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(35, -2, 1.3, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+
+  // big eyes
+  ctx.fillStyle = "#3a332b";
+  ctx.beginPath(); ctx.arc(20, -12, 2.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(30, -13, 2.6, 0, Math.PI * 2); ctx.fill();
+
+  // horns
+  ctx.strokeStyle = "#d8c9a3"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(18, -23); ctx.lineTo(15, -28); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(27, -24); ctx.lineTo(29, -29); ctx.stroke();
+
+  // tail
+  ctx.strokeStyle = "#3a332b"; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(-28, 0);
+  ctx.quadraticCurveTo(-36, 4 + walk.stride * 3, -34, 14);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ---------- C: Pixel art cow ----------
+const PIXEL_PALETTE = { ".": null, "W": "#fffaf0", "B": "#3a332b", "P": "#f4b8ab", "H": "#d8c9a3" };
+const PIXEL_FRAME_1 = [
+  "...HH..HH.......",
+  "..WWWWWWWW......",
+  ".WWBWWWWWWW.....",
+  ".WWWWWWWWWWW....",
+  "WWWWWWWWWWWWW...",
+  "WBWWWWWWWWBWPP..",
+  "WWWWWWWWWWWWPPB.",
+  "WWBWWWWWWWWWPP..",
+  ".WWWWWWWWWWW....",
+  "..B.B....B.B....",
+  "..B.B....B.B....",
+];
+const PIXEL_FRAME_2 = [
+  "...HH..HH.......",
+  "..WWWWWWWW......",
+  ".WWBWWWWWWW.....",
+  ".WWWWWWWWWWW....",
+  "WWWWWWWWWWWWW...",
+  "WBWWWWWWWWBWPP..",
+  "WWWWWWWWWWWWPPB.",
+  "WWBWWWWWWWWWPP..",
+  ".WWWWWWWWWWW....",
+  ".B.B....B.B.....",
+  ".B..B....B..B...",
+];
+
+function drawCowC(ctx, ox, oy, frame, px) {
+  ctx.save();
+  ctx.translate(ox - (frame[0].length * px) / 2, oy - (frame.length * px) / 2 + 6);
+  ctx.imageSmoothingEnabled = false;
+  for (let row = 0; row < frame.length; row++) {
+    for (let col = 0; col < frame[row].length; col++) {
+      const c = PIXEL_PALETTE[frame[row][col]];
+      if (!c) continue;
+      ctx.fillStyle = c;
+      ctx.fillRect(col * px, row * px, px + 0.5, px + 0.5);
+    }
+  }
+  ctx.restore();
+}
+
+// ---------- D: Flat paper-cutout cow ----------
+function drawCowD(ctx, ox, oy, walk) {
+  ctx.save();
+  ctx.translate(ox, oy - walk.bob);
+  if (!walk.facingRight) ctx.scale(-1, 1);
+
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(2, 32 + walk.bob, 26, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const legSwing = walk.stride * 7;
+
+  // legs — flat rounded rectangles
+  function leg(x, swing) {
+    ctx.fillStyle = "#4a4038";
+    ctx.beginPath();
+    ctx.moveTo(x - 3, 6);
+    ctx.lineTo(x + 3, 6);
+    ctx.lineTo(x + 3 + swing * 0.4, 26);
+    ctx.lineTo(x - 3 + swing * 0.4, 26);
+    ctx.closePath();
+    ctx.fill();
+  }
+  leg(-14, legSwing);
+  leg(12, -legSwing);
+
+  // body — flat polygon (hexagon-ish barrel shape, no curves = "paper" feel)
+  ctx.fillStyle = "#f2ead6";
+  ctx.beginPath();
+  ctx.moveTo(-30, 4);
+  ctx.lineTo(-24, -14);
+  ctx.lineTo(10, -16);
+  ctx.lineTo(22, -4);
+  ctx.lineTo(20, 12);
+  ctx.lineTo(-24, 14);
+  ctx.closePath();
+  ctx.fill();
+
+  // spot
+  ctx.fillStyle = "#4a4038";
+  ctx.beginPath();
+  ctx.moveTo(-16, -10); ctx.lineTo(-4, -12); ctx.lineTo(-6, 0); ctx.lineTo(-18, 2);
+  ctx.closePath();
+  ctx.fill();
+
+  // head — flat trapezoid
+  ctx.fillStyle = "#f2ead6";
+  ctx.beginPath();
+  ctx.moveTo(18, -18);
+  ctx.lineTo(34, -16);
+  ctx.lineTo(38, -2);
+  ctx.lineTo(30, 8);
+  ctx.lineTo(16, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // ears
+  ctx.fillStyle = "#f2ead6";
+  ctx.beginPath(); ctx.moveTo(20, -18); ctx.lineTo(16, -26); ctx.lineTo(26, -20); ctx.closePath(); ctx.fill();
+
+  // snout
+  ctx.fillStyle = "#e3a99b";
+  ctx.beginPath();
+  ctx.moveTo(30, -2); ctx.lineTo(40, -1); ctx.lineTo(38, 7); ctx.lineTo(28, 6);
+  ctx.closePath();
+  ctx.fill();
+
+  // eye + nostril (flat dots)
+  ctx.fillStyle = "#2c2418";
+  ctx.beginPath(); ctx.arc(24, -10, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(33, 2, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(37, 2, 1.2, 0, Math.PI * 2); ctx.fill();
+
+  // horns
+  ctx.strokeStyle = "#c9b98f"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(20, -19); ctx.lineTo(17, -25); ctx.stroke();
+
+  // tail
+  ctx.strokeStyle = "#4a4038"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-30, -2);
+  ctx.quadraticCurveTo(-38, 2 + walk.stride * 3, -36, 12);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ---------- Render loop ----------
+function setupStage(canvasId, drawFn) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const groundCx = W / 2, groundCy = H / 2 + 30;
+
+  function frame(t) {
+    ctx.clearRect(0, 0, W, H);
+    const [ga, gb] = groundColors();
+    drawGround(ctx, groundCx, groundCy, 5, 3, ga, gb);
+    const walk = walkState(t, 1800, 90, 22);
+    drawFn(ctx, groundCx + walk.sx, groundCy + walk.sy - 30, walk, t);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+setupStage("cA", (ctx, x, y, walk) => drawCowA(ctx, x, y, walk));
+setupStage("cB", (ctx, x, y, walk) => drawCowB(ctx, x, y, walk));
+setupStage("cC", (ctx, x, y, walk, t) => {
+  const frame = Math.floor(t / 260) % 2 === 0 ? PIXEL_FRAME_1 : PIXEL_FRAME_2;
+  ctx.save();
+  if (!walk.facingRight) { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }
+  drawCowC(ctx, x, y, frame, 8);
+  ctx.restore();
+});
+setupStage("cD", (ctx, x, y, walk) => drawCowD(ctx, x, y, walk));
+</script>
