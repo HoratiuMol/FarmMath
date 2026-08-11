@@ -1,6 +1,6 @@
 # Farm Math Builder — Project Status
 
-**Last updated:** 2026-08-08 (per-device saves, fence moved off tappable cells, dialog button overlap fixed)
+**Last updated:** 2026-08-10 (onboarding/age-select-at-launch removed entirely; gameplay-improvement backlog opened)
 **Project root:** `C:\Users\moldovan\Desktop\ProyectosClaudeCode\LaGranja`
 **Stack:** Native Android (Kotlin + Jetpack Compose + Room), MVVM/StateFlow, minSdk 26 / targetSdk 34
 **Open in:** Android Studio (project root above)
@@ -25,7 +25,7 @@
 - **Natural, focal-point-aware pinch zoom**: `FarmGridCanvas`'s `detectTransformGestures` now uses the pinch centroid so the point under your fingers stays fixed while zooming (composed correctly with simultaneous two-finger panning); zoom range widened to 0.5x–3.5x
 - Daily reset at **device-local midnight** (not UTC)
 - **Math exercise modal now covers addition + subtraction + (age 10-12 only) single-digit multiplication/division**, 4 multiple choice, age-scaled ranges (6-9 → add/subtract on 1-10, 10-12 → add/subtract on 1-50 plus multiply/divide on 1-9), unlimited retry, no penalty. Subtraction never goes negative (minuend/subtrahend picked via max/min); division is always exact (dividend built from divisor×quotient, both single-digit).
-- **Onboarding/tutorial** (no welcome screen — removed per founder request): a fresh install with no saved game goes straight to age-band select (with a "you can change this anytime in Settings" hint) → guided first field → **60-second shortened tutorial timer** → harvest → guided exercise → free play. Any player who has already completed onboarding (`player.onboardingCompleted`) skips all of this entirely and lands directly on the main farm view on every subsequent launch — this check already existed (`FarmViewModel`'s `needsOnboarding`), so returning players were never re-shown onboarding; this session's change only removed the extra "Welcome to Farm Math Builder!" screen that used to precede age-select for first-time players
+- **Onboarding/tutorial removed entirely (2026-08-10)** — every install, first-run or returning, now lands directly on the main farm view. Age band / math difficulty is chosen **only from Settings** (already existed there, unaffected), defaulting to `AgeBand.AGE_6_9` until changed. See the 2026-08-10 log entry for the full removal (age-select screen, guided on-board tutorial tooltips, the 60s shortened first-field timer, all of it).
 - **Settings screen: age band / math difficulty is now editable** (segmented control, same visual pattern as the text-size selector, with a "This also sets how hard your math problems are." caption) — was read-only; volume, mute, text size, high contrast, no-notifications toggle (schema-only, no real notifications yet); restyled into cozy-farm-themed grouped sections (see 2026-08-08 UI polish log entry)
 - **Barn mesh floating bug fixed**: the barn's ground anchor was computed from the global minimum of all rotated vertices' Y, which could pick a roof vertex instead of the true floor (rotateX mixes height and depth) — now anchored to the rotated projection of the mesh's actual floor-center point, so the barn's base sits flush on its 2x2 tile footprint instead of floating above/beside it
 - **Top HUD and Settings screen restyled to match the established "cozy farm" visual language** (was: bare Material3 defaults) — `HudOverlay.kt`'s `TopHud`/`FabColumn`/`ExpandMapButton` and `SettingsScreen.kt` now pull from the `Color.kt` palette (`CardCream`, `SoilBrown`, `GrassGreenDark`, `WheatGold`) with a wood/parchment-bordered HUD card, chip-style counters, palette-colored FABs, and a sectioned/card-grouped Settings layout with a proper segmented text-size control and icon back button
@@ -51,6 +51,21 @@
 - Fix anything Android Studio's inspector flags that CLI Gradle didn't catch
 - Decide whether to invest in cancel-growth animation / streak UI polish (Should-tier) before wider testing
 
+## 🎯 Backlog — Gameplay Improvements (proposed 2026-08-10, not yet implemented)
+
+Proposed as quick, low-risk wins that build on systems already in the game (daily free/extra slots, `currentStreak`/`exercisesSolvedToday` on `PlayerEntity`, `ConfettiOverlay`, map expansion). None started yet — tracking here so they don't get lost.
+
+- [ ] **"Harvest all" button** — iterate all currently-mature cells and harvest them in one tap, instead of one at a time.
+- [ ] **Correct-answer streak bonus** — a currency multiplier/bonus for N math exercises solved correctly in a row within a session (distinct from the existing daily `currentStreak`, which tracks something else — needs a small design decision on how the two relate).
+- [ ] **Ready-to-harvest indicator** — a badge/counter on the HUD or math FAB showing how many mature cells are waiting, so it's visible without scanning the whole board.
+- [ ] **Undo last build** — a short-lived Snackbar action ("Undo") after planting/building on a cell, reusing the existing Snackbar pattern already in `FarmScreen`.
+- [ ] **Daily login streak** — a growing bonus for playing on consecutive calendar days (separate from the existing exercise-correctness streak); needs a new persisted field (e.g. `lastPlayedDate`/`loginStreakDays` on `PlayerEntity`).
+- [ ] **Review failed exercises** — remember the last few incorrectly-answered problems and offer a "review" mode from the Stats dialog.
+
+## 🕐 Session Decisions Log (recent)
+
+- **2026-08-10, Filament/SceneView 3D board-render migration attempted and fully reverted** — see the dedicated log entry below. Working tree is back to the pre-attempt committed state (Canvas-based `FarmGridCanvas`, Gradle 9.0.0, Room 2.6.1, compileSdk 34, no SceneView dependency). Not revisiting unless the founder explicitly asks, and if so, testing on a real device from the start rather than an emulator (Filament triggered an emulator-only `system_server` crash during that attempt).
+
 ---
 
 ## 3D Engine Options (comparison)
@@ -68,6 +83,21 @@ The barn mesh work proved the current approach can render real 3D geometry, but 
 ---
 
 ## Log
+
+### 2026-08-10 — Onboarding/tutorial removed entirely; age selection lives only in Settings
+- Founder request: remove the start-of-app screens (age-band select + the guided on-board tutorial that followed it) so every launch — first-run or returning — goes straight to the farm view. Age band/difficulty stays changeable, but only from Settings (already existed there).
+- **Files touched**: `PlayerEntity.kt` (removed `onboardingCompleted`, `tutorialFirstFieldPlanted` columns), `AppDatabase.kt` (version 2 → 3, relies on existing `.fallbackToDestructiveMigration()`), `GrowthCalculator.kt` (removed `TUTORIAL_GROWTH_DURATION_MS`), `FarmRepository.kt` (`plantWheat` always uses `NORMAL_GROWTH_DURATION_MS` now; removed `completeOnboarding()`), `FarmUiState.kt` (removed the `TutorialStep` enum and `needsOnboarding`/`tutorialStep`/`tutorialFirstFieldCellId`/`exerciseIsGuidedTutorial` fields), `FarmViewModel.kt` (removed `selectAgeBand`, `advanceTutorialIfNeeded`, `completeOnboarding`, the tutorial-step advances inside `buildFreeOrExtra`/`harvest`/`submitAnswer`/`closeExercise`; `openExercise()` lost its `guidedTutorial` param; kept `updateAgeBand` for Settings), `MainActivity.kt` (removed the onboarding routing branch and the `OnboardingScreen`/`TutorialStep` imports), `OnboardingScreen.kt` (**deleted**, no longer referenced anywhere), `MathExerciseDialog.kt` (removed `isGuidedTutorial` param, button always reads "Nice!"), `FarmScreen.kt` (removed `isTutorialActive`/`highlightCellId` tutorial logic, the `TutorialTooltip` composable, and the `LaunchedEffect` that auto-opened the guided exercise; `FarmGridCanvas`'s `highlightedCellId` is now always `null` — the parameter itself was left in place as a still-useful hook, just nothing drives it anymore).
+- **Schema note**: dropping two `PlayerEntity` columns bumped `AppDatabase` to version 3, same "acceptable pre-release, no real migration" convention already established for the version 1→2 bump (see the map-expansion entry below) — existing local saves will be wiped on next install/update, same caveat as before.
+- **Build result**: `JAVA_HOME=C:\Program Files\Android\Android Studio\jbr`, `gradlew.bat assembleDebug` → **BUILD SUCCESSFUL**. Only the two pre-existing deprecation warnings (`Icons.Filled.ArrowBack`/`VolumeUp`), no new warnings.
+- **Deviations**: none. Not yet verified on-device — worth confirming both a fresh install and an existing save land directly on the farm view, and that Settings' age-band control still changes math difficulty correctly.
+
+### 2026-08-10 — Filament/SceneView 3D board-render migration attempted, then fully reverted
+- Founder asked for the board renderer (`FarmGridCanvas.kt`, currently hand-drawn 2D isometric via Compose `Canvas`) to be swapped for Filament (via `io.github.sceneview:sceneview`), keeping every other layer (Room, ViewModel, dialogs/HUD) untouched. Phase 1 (dependency + a single lit colored ground plane, no real tile geometry yet) was implemented and built successfully (`assembleDebug` green, including native `.so` packaging).
+- **Real, non-fudgeable blocker found along the way**: the actively-developed SceneView v4.x ("Compose-native") artifacts are compiled with Kotlin metadata requiring a ≥2.4.0 compiler, but Room's KSP annotation processor has no Kotlin-2.4.x-compatible release yet (confirmed via Maven Central metadata) — so v4.x and Room/KSP could not coexist in this project as of this session. Fell back to the older, still-maintained `sceneview:2.3.3` (classic `SurfaceView`-in-`AndroidView` API), which the founder explicitly approved and which did compile cleanly. Side-effect version bumps needed for that: `compileSdk`/`targetSdk` 34→35, JVM target 17→21, Room 2.6.1→2.7.2 (unrelated pre-existing KSP2 bug that only surfaced once the classpath shifted).
+- **Then blocked on-device**: on the founder's emulator, launching the app after Phase 1 crashed `system_server` itself (`FATAL EXCEPTION IN SYSTEM PROCESS`, an `@IntRange` validation failure on a framework Binder call) — a known category of emulator GPU/graphics-backend bug triggered by `SurfaceView`-based renderers needing real GLES3/Vulkan, not a bug in the Phase-1 code. Recommended toggling the emulator's Graphics setting or testing on a real device; founder chose instead to abandon the migration for now given the friction.
+- **Rollback**: `app/build.gradle.kts` and `FarmGridCanvas.kt` restored via `git checkout` to the last commit (both were the only files this migration touched — confirmed via diff before restoring). Separately, the working tree also had *pre-existing, unrelated* local edits (Gradle wrapper bumped 9.0.0→9.2.1, root `build.gradle.kts`/`settings.gradle.kts`/`gradle.properties`, and a `PlayerEntity`/`AppDatabase` version bump) from before this session started; founder asked to discard those too to match GitHub exactly, so the whole working tree was reset to `origin/main` (commit `22e94e6`).
+- **Build result after full revert**: `gradlew.bat assembleDebug` → **BUILD SUCCESSFUL**, byte-identical to the committed state.
+- **Deviations**: none — this is a full revert, not a partial one. **Not revisiting Filament/SceneView unless explicitly asked again**, and if so: test on a real device from the start rather than an emulator, and budget time for the SceneView-version-vs-Room/KSP compatibility check up front.
 
 ### 2026-08-08 — Fix pass: per-device saves, fence off tappable cells, dialog overlap
 Four founder-reported issues from a device test pass, fixed directly (no delegated agent needed — all four were small, precisely-scoped changes):

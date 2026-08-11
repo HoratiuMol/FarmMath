@@ -74,28 +74,19 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                         isWithinBuildableRadius = GridMath.isWithinBuildableRadius(cell.col, cell.row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius)
                     )
                 }
-                val needsOnboarding = player != null && !player.onboardingCompleted
-                Triple(uiCells, player, settings) to (needsOnboarding to gridConfig)
-            }.collect { (data, extra) ->
+                Triple(uiCells, player, settings) to gridConfig
+            }.collect { (data, gridConfig) ->
                 val (uiCells, player, settings) = data
-                val (needsOnboarding, gridConfig) = extra
-                val current = _uiState.value
-                _uiState.value = current.copy(
+                _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     cells = uiCells,
                     player = player,
                     settings = settings,
-                    gridConfig = gridConfig,
-                    needsOnboarding = needsOnboarding,
-                    tutorialFirstFieldCellId = current.tutorialFirstFieldCellId
-                        ?: firstBuildableCellId(uiCells)
+                    gridConfig = gridConfig
                 )
             }
         }
     }
-
-    private fun firstBuildableCellId(cells: List<UiCell>): Int? =
-        cells.firstOrNull { it.isEmpty && it.isWithinBuildableRadius && !it.isBuildingCell }?.id
 
     // ---------- Cell interaction ----------
 
@@ -124,7 +115,6 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
             }
             repository.plantWheat(cellId)
             _uiState.value = _uiState.value.copy(selectedCellId = null)
-            advanceTutorialIfNeeded(TutorialStep.GUIDED_BUILD, TutorialStep.WAIT_GROWTH)
         }
     }
 
@@ -143,7 +133,6 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                     selectedCellId = null,
                     showHarvestCelebrationForCellId = cellId
                 )
-                advanceTutorialIfNeeded(TutorialStep.GUIDED_HARVEST, TutorialStep.GUIDED_EXERCISE)
             }
         }
     }
@@ -198,12 +187,11 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
 
     // ---------- Math exercise ----------
 
-    fun openExercise(guidedTutorial: Boolean = false) {
+    fun openExercise() {
         val ageBand = _uiState.value.player?.ageBand ?: AgeBand.AGE_6_9
         val exercise = MathExerciseGenerator.generate(ageBand)
         _uiState.value = _uiState.value.copy(
             activeExercise = exercise,
-            exerciseIsGuidedTutorial = guidedTutorial,
             exercisePurposeCellId = null,
             lastAnswerCorrect = null
         )
@@ -215,7 +203,6 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         val exercise = MathExerciseGenerator.generate(ageBand)
         _uiState.value = _uiState.value.copy(
             activeExercise = exercise,
-            exerciseIsGuidedTutorial = false,
             exercisePurposeCellId = cellId,
             lastAnswerCorrect = null,
             selectedCellId = null
@@ -235,11 +222,6 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
             } else {
                 repository.recordExerciseResult(correct)
                 _uiState.value = _uiState.value.copy(lastAnswerCorrect = correct)
-                if (correct) {
-                    if (_uiState.value.exerciseIsGuidedTutorial) {
-                        advanceTutorialIfNeeded(TutorialStep.GUIDED_EXERCISE, TutorialStep.DONE)
-                    }
-                }
             }
         }
     }
@@ -253,49 +235,20 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
     }
 
     fun closeExercise() {
-        val wasGuided = _uiState.value.exerciseIsGuidedTutorial
-        val answeredCorrectly = _uiState.value.lastAnswerCorrect == true
         _uiState.value = _uiState.value.copy(
             activeExercise = null,
-            exerciseIsGuidedTutorial = false,
             exercisePurposeCellId = null,
             lastAnswerCorrect = null
         )
-        if (wasGuided && answeredCorrectly) {
-            completeOnboarding()
-        }
     }
 
-    // ---------- Onboarding / tutorial ----------
+    // ---------- Settings ----------
 
-    fun selectAgeBand(ageBand: AgeBand) {
-        viewModelScope.launch {
-            repository.setAgeBand(ageBand)
-            _uiState.value = _uiState.value.copy(tutorialStep = TutorialStep.GUIDED_BUILD)
-        }
-    }
-
-    /** Settings-driven age/difficulty change — no tutorial-step side effect (unlike selectAgeBand). */
     fun updateAgeBand(ageBand: AgeBand) {
         viewModelScope.launch {
             repository.setAgeBand(ageBand)
         }
     }
-
-    private fun advanceTutorialIfNeeded(from: TutorialStep, to: TutorialStep) {
-        if (_uiState.value.needsOnboarding && _uiState.value.tutorialStep == from) {
-            _uiState.value = _uiState.value.copy(tutorialStep = to)
-        }
-    }
-
-    fun completeOnboarding() {
-        viewModelScope.launch {
-            repository.completeOnboarding()
-            _uiState.value = _uiState.value.copy(tutorialStep = TutorialStep.DONE)
-        }
-    }
-
-    // ---------- Settings ----------
 
     fun updateSettings(mutator: (SettingsEntity) -> SettingsEntity) {
         viewModelScope.launch {

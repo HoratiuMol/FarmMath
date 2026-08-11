@@ -16,9 +16,6 @@ data class PlayerEntity(
     val ageBand: AgeBand? = null,
     val exercisesSolvedToday: Int = 0,
     val currentStreak: Int = 0,
-    val onboardingCompleted: Boolean = false,
-    /** R-9: tracks whether the tutorial's shortened-timer first field has been planted yet. */
-    val tutorialFirstFieldPlanted: Boolean = false,
     val pathTypesUnlocked: Int = 1,
     val fieldsCompletedTotal: Int = 0,
     /** Map expansion (founder request): grid can grow beyond the starting 6x8. */

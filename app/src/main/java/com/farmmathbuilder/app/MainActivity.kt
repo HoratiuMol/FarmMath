@@ -16,11 +16,9 @@ import com.farmmathbuilder.app.data.db.AppDatabase
 import com.farmmathbuilder.app.data.repository.FarmRepository
 import com.farmmathbuilder.app.domain.TextSizeOption
 import com.farmmathbuilder.app.ui.screens.FarmScreen
-import com.farmmathbuilder.app.ui.screens.OnboardingScreen
 import com.farmmathbuilder.app.ui.screens.SettingsScreen
 import com.farmmathbuilder.app.ui.theme.FarmMathBuilderTheme
 import com.farmmathbuilder.app.viewmodel.FarmViewModel
-import com.farmmathbuilder.app.viewmodel.TutorialStep
 
 class MainActivity : ComponentActivity() {
 
@@ -47,12 +45,6 @@ class MainActivity : ComponentActivity() {
                     when {
                         uiState.isLoading -> {
                             // Splash-equivalent: empty surface while first Room read resolves (<3s cold start, NFR-009).
-                        }
-                        uiState.needsOnboarding && uiState.tutorialStep == TutorialStep.AGE_SELECT -> {
-                            OnboardingScreen(
-                                step = uiState.tutorialStep,
-                                onAgeBandSelected = { viewModel.selectAgeBand(it) }
-                            )
                         }
                         showSettings -> {
                             SettingsScreen(

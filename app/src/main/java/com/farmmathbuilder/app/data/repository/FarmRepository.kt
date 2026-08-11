@@ -151,17 +151,13 @@ class FarmRepository(
         val availability = slotAvailability(p)
         if (availability == SlotAvailability.NONE_AVAILABLE) return false
 
-        val useTutorialTimer = !p.tutorialFirstFieldPlanted && !p.onboardingCompleted
-        val duration = if (useTutorialTimer) GrowthCalculator.TUTORIAL_GROWTH_DURATION_MS
-        else GrowthCalculator.NORMAL_GROWTH_DURATION_MS
-
         val slotType = if (availability == SlotAvailability.FREE_SLOT_AVAILABLE) "FREE" else "EXTRA"
 
         cellDao.update(
             cell.copy(
                 occupantType = OccupantType.WHEAT,
                 plantedAtTimestamp = System.currentTimeMillis(),
-                growthDurationMs = duration,
+                growthDurationMs = GrowthCalculator.NORMAL_GROWTH_DURATION_MS,
                 consumedSlotType = slotType
             )
         )
@@ -169,8 +165,7 @@ class FarmRepository(
         playerDao.update(
             p.copy(
                 freeFieldsUsedToday = if (slotType == "FREE") p.freeFieldsUsedToday + 1 else p.freeFieldsUsedToday,
-                extraFieldsUsedToday = if (slotType == "EXTRA") p.extraFieldsUsedToday + 1 else p.extraFieldsUsedToday,
-                tutorialFirstFieldPlanted = if (useTutorialTimer) true else p.tutorialFirstFieldPlanted
+                extraFieldsUsedToday = if (slotType == "EXTRA") p.extraFieldsUsedToday + 1 else p.extraFieldsUsedToday
             )
         )
         return true
@@ -350,11 +345,6 @@ class FarmRepository(
     suspend fun setAgeBand(ageBand: AgeBand) {
         val p = playerDao.get() ?: return
         playerDao.update(p.copy(ageBand = ageBand))
-    }
-
-    suspend fun completeOnboarding() {
-        val p = playerDao.get() ?: return
-        playerDao.update(p.copy(onboardingCompleted = true))
     }
 
     suspend fun updateSettings(mutator: (SettingsEntity) -> SettingsEntity) {

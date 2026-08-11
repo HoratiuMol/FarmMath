@@ -11,9 +11,6 @@ object GrowthCalculator {
     /** Real MVP growth duration: 10 minutes (FR-012). */
     const val NORMAL_GROWTH_DURATION_MS: Long = 10 * 60 * 1000L
 
-    /** R-9: shortened growth duration for the very first field planted during tutorial. */
-    const val TUTORIAL_GROWTH_DURATION_MS: Long = 60 * 1000L
-
     /**
      * Given the timestamp a seed was planted and the duration it takes to mature,
      * compute the current growth phase. Pure function of (now, plantedAt, duration).

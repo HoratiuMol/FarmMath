@@ -36,7 +36,6 @@ import com.farmmathbuilder.app.domain.MathOperation
 fun MathExerciseDialog(
     exercise: Exercise,
     lastAnswerCorrect: Boolean?,
-    isGuidedTutorial: Boolean,
     isTimeReduction: Boolean = false,
     onAnswer: (Int) -> Unit,
     onNext: () -> Unit,
@@ -96,7 +95,7 @@ fun MathExerciseDialog(
                         color = Color(0xFF2E7D32)
                     )
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = onClose) { Text(if (isGuidedTutorial) "Continue" else "Nice!") }
+                    Button(onClick = onClose) { Text("Nice!") }
                 }
                 false -> {
                     Text("Not quite — try again!", color = Color(0xFFC62828))
