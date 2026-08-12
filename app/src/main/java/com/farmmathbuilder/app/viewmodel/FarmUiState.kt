@@ -20,5 +20,10 @@ data class FarmUiState(
     val showHarvestCelebrationForCellId: Int? = null,
     val dailyResetSnackbar: Boolean = false,
     val noSlotsSnackbar: Boolean = false,
-    val expandGridSnackbar: String? = null
+    val expandGridSnackbar: String? = null,
+    /** True while the player is picking a new spot for the barn (see FarmViewModel
+     * startRepositioningBuilding/onRepositionTarget) — grid taps place the building
+     * instead of their normal cell action while this is true. */
+    val isRepositioningBuilding: Boolean = false,
+    val moveBuildingSnackbar: String? = null
 )

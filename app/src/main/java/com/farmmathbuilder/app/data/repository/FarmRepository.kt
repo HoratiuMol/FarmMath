@@ -50,8 +50,21 @@ class FarmRepository(
         playerDao.update(p.copy(wheatCurrency = maxOf(p.wheatCurrency, TEST_MIN_WHEAT)))
 
     val uiCells: Flow<List<UiCell>> = cells.combine(player) { cellList, p ->
-        val config = p?.let { GridConfig(it.gridCols, it.gridRows, it.buildableRadius) } ?: GridConfig.BASE
+        val config = configFor(p)
         cellList.map { it.toUiCell(config = config) }
+    }
+
+    /** Resolves a player's persisted grid state into a [GridConfig], falling back to
+     * the default (centered) building anchor when the player hasn't moved it yet. */
+    private fun configFor(p: PlayerEntity?): GridConfig {
+        if (p == null) return GridConfig.BASE
+        return GridConfig(
+            cols = p.gridCols,
+            rows = p.gridRows,
+            buildableRadius = p.buildableRadius,
+            buildingAnchorCol = p.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(p.gridCols),
+            buildingAnchorRow = p.buildingAnchorRow ?: GridMath.defaultBuildingAnchorRow(p.gridRows)
+        )
     }
 
     private fun CellEntity.toUiCell(now: Long = System.currentTimeMillis(), config: GridConfig): UiCell {
@@ -72,8 +85,8 @@ class FarmRepository(
             growthDurationMs = growthDurationMs,
             pathType = pathType,
             pathRotationDegrees = pathRotationDegrees,
-            isBuildingCell = GridMath.isBuildingCell(col, row, config.cols, config.rows),
-            isWithinBuildableRadius = GridMath.isWithinBuildableRadius(col, row, config.cols, config.rows, config.buildableRadius)
+            isBuildingCell = GridMath.isBuildingCell(col, row, config.buildingAnchorCol, config.buildingAnchorRow),
+            isWithinBuildableRadius = GridMath.isWithinBuildableRadius(col, row, config.cols, config.rows, config.buildableRadius, config.buildingAnchorCol, config.buildingAnchorRow)
         )
     }
 
@@ -82,10 +95,12 @@ class FarmRepository(
         if (cellDao.count() > 0) return
         val cols = GridMath.BASE_COLS
         val rows = GridMath.BASE_ROWS
+        val anchorCol = GridMath.defaultBuildingAnchorCol(cols)
+        val anchorRow = GridMath.defaultBuildingAnchorRow(rows)
         val cells = mutableListOf<CellEntity>()
         for (row in 0 until rows) {
             for (col in 0 until cols) {
-                val occupant = if (GridMath.isBuildingCell(col, row, cols, rows)) OccupantType.BUILDING else OccupantType.EMPTY
+                val occupant = if (GridMath.isBuildingCell(col, row, anchorCol, anchorRow)) OccupantType.BUILDING else OccupantType.EMPTY
                 cells.add(
                     CellEntity(
                         id = GridMath.cellId(col, row, cols),
@@ -280,7 +295,8 @@ class FarmRepository(
         val cell = cellDao.getById(cellId) ?: return false
         if (cell.occupantType != OccupantType.EMPTY) return false
         val p = playerDao.get() ?: return false
-        if (!GridMath.isWithinBuildableRadius(cell.col, cell.row, p.gridCols, p.gridRows, p.buildableRadius)) return false
+        val config = configFor(p)
+        if (!GridMath.isWithinBuildableRadius(cell.col, cell.row, config.cols, config.rows, config.buildableRadius, config.buildingAnchorCol, config.buildingAnchorRow)) return false
         cellDao.update(
             cell.copy(
                 occupantType = OccupantType.PATH,
@@ -350,9 +366,77 @@ class FarmRepository(
                 gridCols = newCols,
                 gridRows = newRows,
                 gridExpansionLevel = p.gridExpansionLevel + 1,
-                buildableRadius = p.buildableRadius + 1
+                buildableRadius = p.buildableRadius + 1,
+                // A null anchor (never manually moved) stays null: the default-center
+                // formula already recenters correctly on the new cols/rows because the
+                // grid grows symmetrically. A custom anchor (player used "move barn")
+                // must shift by the same +1/+1 as every cell above, or the building
+                // would visually jump relative to the rest of the map.
+                buildingAnchorCol = p.buildingAnchorCol?.plus(1),
+                buildingAnchorRow = p.buildingAnchorRow?.plus(1)
             )
         )
+        return true
+    }
+
+    /** "Move barn" is only offered while no wheat is growing/mature anywhere on the
+     * map — moving it mid-harvest would silently orphan a crop under the new
+     * footprint (its 4 cells are hard-required EMPTY, see [moveBuilding]). */
+    suspend fun canRepositionBuilding(): Boolean =
+        cellDao.getAll().none { it.occupantType == OccupantType.WHEAT }
+
+    /** True if a building anchored at (anchorCol, anchorRow) would (a) fit inside the
+     * buildable ring without touching the fenced-off border and (b) land only on
+     * cells that are empty or already part of the *current* building (so tapping the
+     * barn's own footprint is always a harmless no-op, not a rejected move). */
+    suspend fun isValidBuildingTarget(anchorCol: Int, anchorRow: Int): Boolean {
+        val p = playerDao.get() ?: return false
+        if (!GridMath.isValidBuildingAnchor(anchorCol, anchorRow, p.gridCols, p.gridRows)) return false
+        val oldAnchorCol = p.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(p.gridCols)
+        val oldAnchorRow = p.buildingAnchorRow ?: GridMath.defaultBuildingAnchorRow(p.gridRows)
+        val targetCells = cellDao.getAll().filter { GridMath.isBuildingCell(it.col, it.row, anchorCol, anchorRow) }
+        if (targetCells.size != 4) return false
+        return targetCells.all {
+            it.occupantType == OccupantType.EMPTY || GridMath.isBuildingCell(it.col, it.row, oldAnchorCol, oldAnchorRow)
+        }
+    }
+
+    /**
+     * Founder request "reposicionar el granero": relocates the Farm Building's 2x2
+     * footprint to a new anchor, only while [canRepositionBuilding] holds (no wheat
+     * anywhere — see its doc). The old footprint's cells revert to EMPTY, the new
+     * footprint's cells become BUILDING, and the player's persisted anchor moves —
+     * everything else (paths, the fence ring, buildable radius) is untouched.
+     */
+    suspend fun moveBuilding(newAnchorCol: Int, newAnchorRow: Int): Boolean {
+        val p = playerDao.get() ?: return false
+        val allCells = cellDao.getAll()
+        if (allCells.any { it.occupantType == OccupantType.WHEAT }) return false
+        if (!GridMath.isValidBuildingAnchor(newAnchorCol, newAnchorRow, p.gridCols, p.gridRows)) return false
+
+        val oldAnchorCol = p.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(p.gridCols)
+        val oldAnchorRow = p.buildingAnchorRow ?: GridMath.defaultBuildingAnchorRow(p.gridRows)
+        if (newAnchorCol == oldAnchorCol && newAnchorRow == oldAnchorRow) return false
+
+        val targetCells = allCells.filter { GridMath.isBuildingCell(it.col, it.row, newAnchorCol, newAnchorRow) }
+        if (targetCells.size != 4) return false
+        val targetsAreFree = targetCells.all {
+            it.occupantType == OccupantType.EMPTY || GridMath.isBuildingCell(it.col, it.row, oldAnchorCol, oldAnchorRow)
+        }
+        if (!targetsAreFree) return false
+
+        val changedCells = allCells.mapNotNull { cell ->
+            val wasBuilding = GridMath.isBuildingCell(cell.col, cell.row, oldAnchorCol, oldAnchorRow)
+            val willBeBuilding = GridMath.isBuildingCell(cell.col, cell.row, newAnchorCol, newAnchorRow)
+            when {
+                willBeBuilding && !wasBuilding -> cell.copy(occupantType = OccupantType.BUILDING)
+                wasBuilding && !willBeBuilding -> cell.copy(occupantType = OccupantType.EMPTY, pathType = null, pathRotationDegrees = 0)
+                else -> null
+            }
+        }
+        if (changedCells.isNotEmpty()) cellDao.updateAll(changedCells)
+
+        updatePlayer(p.copy(buildingAnchorCol = newAnchorCol, buildingAnchorRow = newAnchorRow))
         return true
     }
 

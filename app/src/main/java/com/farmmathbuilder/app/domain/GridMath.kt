@@ -6,10 +6,26 @@ import kotlin.math.max
 /**
  * Grid size/radius bundle threaded through GridMath/FarmGridCanvas/ViewModel/UiState
  * so the grid can grow at runtime (map expansion) instead of being fixed forever.
+ * buildingAnchorCol/Row is the top-left cell of the Farm Building's 2x2 footprint —
+ * defaults to the grid center (see [GridMath.defaultBuildingAnchorCol]/[Row]) but is
+ * player-repositionable (see FarmRepository.moveBuilding), so it's carried as plain
+ * state here rather than always recomputed from cols/rows.
  */
-data class GridConfig(val cols: Int, val rows: Int, val buildableRadius: Int) {
+data class GridConfig(
+    val cols: Int,
+    val rows: Int,
+    val buildableRadius: Int,
+    val buildingAnchorCol: Int,
+    val buildingAnchorRow: Int
+) {
     companion object {
-        val BASE = GridConfig(GridMath.BASE_COLS, GridMath.BASE_ROWS, GridMath.BASE_RADIUS)
+        val BASE = GridConfig(
+            GridMath.BASE_COLS,
+            GridMath.BASE_ROWS,
+            GridMath.BASE_RADIUS,
+            GridMath.defaultBuildingAnchorCol(GridMath.BASE_COLS),
+            GridMath.defaultBuildingAnchorRow(GridMath.BASE_ROWS)
+        )
     }
 }
 
@@ -28,23 +44,23 @@ object GridMath {
 
     fun cellId(col: Int, row: Int, cols: Int): Int = row * cols + col
 
-    /** Top-left anchor of the central 2x2 "Farm Building" footprint. */
-    fun buildingAnchorCol(cols: Int): Int = cols / 2 - 1
-    fun buildingAnchorRow(rows: Int): Int = rows / 2 - 1
+    /** Default top-left anchor of the central 2x2 "Farm Building" footprint (grid
+     * center) — used to seed a new save and as the fallback when the player hasn't
+     * repositioned the building yet. The building's *actual* current anchor is
+     * carried explicitly on [GridConfig] (player-repositionable, see
+     * FarmRepository.moveBuilding), so callers with a GridConfig should use its
+     * buildingAnchorCol/Row instead of recomputing the default here. */
+    fun defaultBuildingAnchorCol(cols: Int): Int = cols / 2 - 1
+    fun defaultBuildingAnchorRow(rows: Int): Int = rows / 2 - 1
 
-    /** BR-002: the central building occupies a 2x2 block of 4 permanently non-editable cells. */
-    fun isBuildingCell(col: Int, row: Int, cols: Int, rows: Int): Boolean {
-        val bc = buildingAnchorCol(cols)
-        val br = buildingAnchorRow(rows)
-        return (col == bc || col == bc + 1) && (row == br || row == br + 1)
-    }
+    /** BR-002: the building occupies a 2x2 block of 4 permanently non-editable cells,
+     * anchored at (anchorCol, anchorRow) — its top-left cell. */
+    fun isBuildingCell(col: Int, row: Int, anchorCol: Int, anchorRow: Int): Boolean =
+        (col == anchorCol || col == anchorCol + 1) && (row == anchorRow || row == anchorRow + 1)
 
     /** Chebyshev distance from the building anchor — used to decide "locked vs available". */
-    fun distanceFromBuilding(col: Int, row: Int, cols: Int, rows: Int): Int {
-        val bc = buildingAnchorCol(cols)
-        val br = buildingAnchorRow(rows)
-        return max(abs(col - bc), abs(row - br))
-    }
+    fun distanceFromBuilding(col: Int, row: Int, anchorCol: Int, anchorRow: Int): Int =
+        max(abs(col - anchorCol), abs(row - anchorRow))
 
     /** True for the outermost ring of the grid array — this is exactly where the
      * boundary fence is drawn (see FarmGridCanvas), so it's never buildable. */
@@ -54,8 +70,14 @@ object GridMath {
     /** Buildable = within radius of the building AND not on the fenced-off border
      * ring, so the playable area is always contained by the fence on all 4 sides
      * regardless of how asymmetric cols/rows/building position are. */
-    fun isWithinBuildableRadius(col: Int, row: Int, cols: Int, rows: Int, radius: Int): Boolean =
-        distanceFromBuilding(col, row, cols, rows) <= radius && !isOnGridBorder(col, row, cols, rows)
+    fun isWithinBuildableRadius(col: Int, row: Int, cols: Int, rows: Int, radius: Int, anchorCol: Int, anchorRow: Int): Boolean =
+        distanceFromBuilding(col, row, anchorCol, anchorRow) <= radius && !isOnGridBorder(col, row, cols, rows)
+
+    /** True if a 2x2 building footprint anchored at (anchorCol, anchorRow) would fit
+     * entirely inside the buildable ring (never touching/overlapping the fenced-off
+     * border) — the placement-validity check for FarmRepository.moveBuilding. */
+    fun isValidBuildingAnchor(anchorCol: Int, anchorRow: Int, cols: Int, rows: Int): Boolean =
+        anchorCol >= 1 && anchorCol <= cols - 3 && anchorRow >= 1 && anchorRow <= rows - 3
 
     /** Isometric screen-space projection (unscaled, tile-unit space). */
     fun isoX(col: Number, row: Number, tileWidth: Float): Float =

@@ -14,7 +14,7 @@ import com.farmmathbuilder.app.data.entity.SettingsEntity
 
 @Database(
     entities = [CellEntity::class, PlayerEntity::class, SettingsEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

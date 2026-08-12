@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.farmmathbuilder.app.domain.OccupantType
 import com.farmmathbuilder.app.domain.SlotAvailability
 import com.farmmathbuilder.app.ui.components.CellActionDialog
 import com.farmmathbuilder.app.ui.components.ConfettiOverlay
@@ -26,6 +27,8 @@ import com.farmmathbuilder.app.ui.components.FabColumn
 import com.farmmathbuilder.app.ui.components.FarmGridCanvas
 import com.farmmathbuilder.app.ui.components.HarvestAllButton
 import com.farmmathbuilder.app.ui.components.MathExerciseDialog
+import com.farmmathbuilder.app.ui.components.MoveBarnBanner
+import com.farmmathbuilder.app.ui.components.MoveBarnButton
 import com.farmmathbuilder.app.ui.components.StatsDialog
 import com.farmmathbuilder.app.ui.components.TopHud
 import com.farmmathbuilder.app.viewmodel.FarmViewModel
@@ -57,6 +60,12 @@ fun FarmScreen(
             viewModel.consumeExpandGridSnackbar()
         }
     }
+    LaunchedEffect(uiState.moveBuildingSnackbar) {
+        uiState.moveBuildingSnackbar?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeMoveBuildingSnackbar()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -67,7 +76,9 @@ fun FarmScreen(
                 gridConfig = uiState.gridConfig,
                 highlightedCellId = null,
                 onCellTapped = { cellId -> viewModel.onCellTapped(cellId) },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                isRepositioningBuilding = uiState.isRepositioningBuilding,
+                onRepositionTarget = { col, row -> viewModel.onRepositionTarget(col, row) }
             )
 
             val matureCount = uiState.cells.count { it.isMature }
@@ -93,13 +104,32 @@ fun FarmScreen(
                 modifier = Modifier.align(Alignment.BottomEnd)
             )
 
-            val expansionCost = viewModel.nextExpansionCost()
-            ExpandMapButton(
-                cost = expansionCost,
-                canAfford = (uiState.player?.wheatCurrency ?: 0) >= expansionCost,
-                onClick = { viewModel.expandGrid() },
-                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
-            )
+            val hasWheatOnMap = uiState.cells.any { it.occupantType == OccupantType.WHEAT }
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val expansionCost = viewModel.nextExpansionCost()
+                ExpandMapButton(
+                    cost = expansionCost,
+                    canAfford = (uiState.player?.wheatCurrency ?: 0) >= expansionCost,
+                    onClick = { viewModel.expandGrid() }
+                )
+
+                if (!uiState.isRepositioningBuilding) {
+                    MoveBarnButton(
+                        enabled = !hasWheatOnMap,
+                        onClick = { viewModel.startRepositioningBuilding() }
+                    )
+                }
+            }
+
+            if (uiState.isRepositioningBuilding) {
+                MoveBarnBanner(
+                    onCancel = { viewModel.cancelRepositioningBuilding() },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
+                )
+            }
 
             uiState.selectedCellId?.let { cellId ->
                 val cell = uiState.cells.find { it.id == cellId }

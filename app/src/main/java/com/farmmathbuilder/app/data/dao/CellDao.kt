@@ -26,6 +26,9 @@ interface CellDao {
     @Update
     suspend fun update(cell: CellEntity)
 
+    @Update
+    suspend fun updateAll(cells: List<CellEntity>)
+
     @Query("SELECT COUNT(*) FROM cells")
     suspend fun count(): Int
 

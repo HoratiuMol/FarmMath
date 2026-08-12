@@ -51,7 +51,15 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
     private fun observeState() {
         viewModelScope.launch {
             combine(repository.cells, repository.player, repository.settings, ticker) { cells, player, settings, now ->
-                val gridConfig = player?.let { GridConfig(it.gridCols, it.gridRows, it.buildableRadius) } ?: GridConfig.BASE
+                val gridConfig = player?.let {
+                    GridConfig(
+                        cols = it.gridCols,
+                        rows = it.gridRows,
+                        buildableRadius = it.buildableRadius,
+                        buildingAnchorCol = it.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(it.gridCols),
+                        buildingAnchorRow = it.buildingAnchorRow ?: GridMath.defaultBuildingAnchorRow(it.gridRows)
+                    )
+                } ?: GridConfig.BASE
                 val uiCells = cells.map { cell ->
                     val phase = if (cell.occupantType == OccupantType.WHEAT) {
                         GrowthCalculator.computePhase(cell.plantedAtTimestamp, cell.growthDurationMs, now.takeIf { it > 0 } ?: System.currentTimeMillis())
@@ -70,8 +78,8 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                         growthDurationMs = cell.growthDurationMs,
                         pathType = cell.pathType,
                         pathRotationDegrees = cell.pathRotationDegrees,
-                        isBuildingCell = GridMath.isBuildingCell(cell.col, cell.row, gridConfig.cols, gridConfig.rows),
-                        isWithinBuildableRadius = GridMath.isWithinBuildableRadius(cell.col, cell.row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius)
+                        isBuildingCell = GridMath.isBuildingCell(cell.col, cell.row, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow),
+                        isWithinBuildableRadius = GridMath.isWithinBuildableRadius(cell.col, cell.row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow)
                     )
                 }
                 Triple(uiCells, player, settings) to gridConfig
@@ -91,6 +99,7 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
     // ---------- Cell interaction ----------
 
     fun onCellTapped(cellId: Int) {
+        if (_uiState.value.isRepositioningBuilding) return
         val cell = _uiState.value.cells.find { it.id == cellId } ?: return
         if (cell.isBuildingCell) return
         if (cell.isEmpty && !cell.isWithinBuildableRadius) return // locked cell, no-op
@@ -194,6 +203,42 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
 
     fun consumeExpandGridSnackbar() {
         _uiState.value = _uiState.value.copy(expandGridSnackbar = null)
+    }
+
+    // ---------- Move barn ----------
+
+    /** Whether "move barn" can currently be offered at all — no wheat growing/mature
+     * anywhere on the map (see FarmRepository.canRepositionBuilding's doc). */
+    fun hasWheatOnMap(): Boolean = _uiState.value.cells.any { it.occupantType == OccupantType.WHEAT }
+
+    fun startRepositioningBuilding() {
+        if (hasWheatOnMap()) {
+            _uiState.value = _uiState.value.copy(
+                moveBuildingSnackbar = "Harvest or cancel all wheat first to move the barn"
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isRepositioningBuilding = true, selectedCellId = null)
+    }
+
+    fun cancelRepositioningBuilding() {
+        _uiState.value = _uiState.value.copy(isRepositioningBuilding = false)
+    }
+
+    /** Called when the player taps a cell while in "move barn" mode: that cell
+     * becomes the new top-left anchor of the building's 2x2 footprint. */
+    fun onRepositionTarget(col: Int, row: Int) {
+        viewModelScope.launch {
+            val moved = repository.moveBuilding(col, row)
+            _uiState.value = _uiState.value.copy(
+                isRepositioningBuilding = false,
+                moveBuildingSnackbar = if (moved) null else "Can't place the barn there"
+            )
+        }
+    }
+
+    fun consumeMoveBuildingSnackbar() {
+        _uiState.value = _uiState.value.copy(moveBuildingSnackbar = null)
     }
 
     // ---------- Math exercise ----------

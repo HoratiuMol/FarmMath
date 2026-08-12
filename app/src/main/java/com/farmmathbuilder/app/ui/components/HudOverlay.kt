@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -157,6 +159,51 @@ fun HarvestAllButton(
         icon = { Icon(Icons.Filled.Agriculture, contentDescription = "Harvest all") },
         text = { Text("Harvest all ($matureCount)", fontWeight = FontWeight.Bold) }
     )
+}
+
+/** Enters "move barn" mode (only offered while no wheat is growing/mature anywhere —
+ * disabled/greyed otherwise, same visual language as ExpandMapButton's afford check). */
+@Composable
+fun MoveBarnButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        modifier = modifier,
+        containerColor = if (enabled) SoilBrown else Color(0xFFBDBDBD),
+        contentColor = Color.White,
+        icon = { Icon(Icons.Filled.Home, contentDescription = "Move barn") },
+        text = { Text("Move barn", fontWeight = FontWeight.Bold) }
+    )
+}
+
+/** Banner shown while in "move barn" mode: instructs the player and offers a cancel
+ * escape hatch (tapping a valid tile on the grid itself completes the move). */
+@Composable
+fun MoveBarnBanner(
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(CardCream, RoundedCornerShape(16.dp))
+            .border(2.dp, SoilBrown, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("Tap a highlighted tile to place the barn", color = SoilBrown, fontWeight = FontWeight.Bold)
+        FloatingActionButton(
+            onClick = onCancel,
+            containerColor = Color(0xFFBDBDBD),
+            contentColor = Color.White,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(Icons.Filled.Close, contentDescription = "Cancel move barn")
+        }
+    }
 }
 
 /** Map expansion (founder request): grows the grid one ring at a cost of wheat currency. */

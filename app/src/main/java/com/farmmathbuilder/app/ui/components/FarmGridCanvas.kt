@@ -52,7 +52,9 @@ fun FarmGridCanvas(
     gridConfig: GridConfig,
     highlightedCellId: Int?,
     onCellTapped: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isRepositioningBuilding: Boolean = false,
+    onRepositionTarget: (col: Int, row: Int) -> Unit = { _, _ -> }
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
@@ -91,12 +93,88 @@ fun FarmGridCanvas(
             while (true) {
                 val col = Random.nextInt(gridConfig.cols)
                 val row = Random.nextInt(gridConfig.rows)
-                if (GridMath.isWithinBuildableRadius(col, row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius) &&
-                    !GridMath.isBuildingCell(col, row, gridConfig.cols, gridConfig.rows)
+                if (GridMath.isWithinBuildableRadius(col, row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow) &&
+                    !GridMath.isBuildingCell(col, row, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow)
                 ) {
                     return Offset(col.toFloat(), row.toFloat())
                 }
             }
+        }
+
+        // The barn is the only "solid" obstacle the free-floating cow can walk
+        // through: randomWanderTarget only excludes the building's own 2x2
+        // cells, but a *straight-line* walk between two valid targets on
+        // opposite sides of the barn still cuts across it (the buildable ring
+        // minus the building is a non-convex region). Model the barn as an
+        // axis-aligned rectangle in tile-space, expanded a bit past its 2x2
+        // cell footprint (+0.5 for the cell-center-to-edge half, +0.35 buffer
+        // for the mesh's roof/porch overhang and the cow sprite's own size),
+        // and route the walk around it instead of through it whenever a leg
+        // would cross it.
+        val margin = 0.5f + 0.35f
+        val rectMinCol = gridConfig.buildingAnchorCol.toFloat() - margin
+        val rectMaxCol = gridConfig.buildingAnchorCol.toFloat() + 1f + margin
+        val rectMinRow = gridConfig.buildingAnchorRow.toFloat() - margin
+        val rectMaxRow = gridConfig.buildingAnchorRow.toFloat() + 1f + margin
+
+        // Liang-Barsky segment/AABB clip test: true if segment (x0,y0)-(x1,y1)
+        // crosses or touches the rectangle's interior.
+        fun segmentHitsRect(x0: Float, y0: Float, x1: Float, y1: Float): Boolean {
+            var t0 = 0f
+            var t1 = 1f
+            val dx = x1 - x0
+            val dy = y1 - y0
+            val p = floatArrayOf(-dx, dx, -dy, dy)
+            val q = floatArrayOf(x0 - rectMinCol, rectMaxCol - x0, y0 - rectMinRow, rectMaxRow - y0)
+            for (i in 0 until 4) {
+                if (p[i] == 0f) {
+                    if (q[i] < 0f) return false
+                } else {
+                    val r = q[i] / p[i]
+                    if (p[i] < 0f) {
+                        if (r > t1) return false
+                        if (r > t0) t0 = r
+                    } else {
+                        if (r < t0) return false
+                        if (r < t1) t1 = r
+                    }
+                }
+            }
+            return true
+        }
+
+        // Builds the sequence of waypoints (ending at [end]) the cow should
+        // walk through to get from [start] to [end] without crossing the
+        // barn rectangle. A direct walk needs none; a blocked one is routed
+        // through whichever corner of the (slightly outset, so it never
+        // re-touches the rectangle) obstacle box keeps both legs clear and
+        // minimizes total distance.
+        fun planPath(start: Offset, end: Offset): List<Offset> {
+            if (!segmentHitsRect(start.x, start.y, end.x, end.y)) return listOf(end)
+            val cornerEps = 0.05f
+            val corners = listOf(
+                Offset(rectMinCol - cornerEps, rectMinRow - cornerEps),
+                Offset(rectMaxCol + cornerEps, rectMinRow - cornerEps),
+                Offset(rectMinCol - cornerEps, rectMaxRow + cornerEps),
+                Offset(rectMaxCol + cornerEps, rectMaxRow + cornerEps)
+            )
+            var best: Offset? = null
+            var bestDist = Float.POSITIVE_INFINITY
+            for (corner in corners) {
+                val leg1Clear = !segmentHitsRect(start.x, start.y, corner.x, corner.y)
+                val leg2Clear = !segmentHitsRect(corner.x, corner.y, end.x, end.y)
+                if (leg1Clear && leg2Clear) {
+                    val d = hypot(corner.x - start.x, corner.y - start.y) + hypot(end.x - corner.x, end.y - corner.y)
+                    if (d < bestDist) {
+                        bestDist = d
+                        best = corner
+                    }
+                }
+            }
+            // No single corner clears both legs (can happen if start/end are
+            // deep in a concave pocket) — falling back to a direct walk is a
+            // rare, harmless simplification rather than a full navmesh.
+            return best?.let { listOf(it, end) } ?: listOf(end)
         }
 
         if (cowCol < 0f) {
@@ -116,24 +194,28 @@ fun FarmGridCanvas(
             }
 
             val target = randomWanderTarget()
-            val startCol = cowCol
-            val startRow = cowRow
-            val dCol = target.x - startCol
-            val dRow = target.y - startRow
-            val dist = hypot(dCol, dRow)
-            if (dist < 0.05f) continue
-            cowFacingRight = dCol >= 0f
-
+            val waypoints = planPath(Offset(cowCol, cowRow), target)
             val tilesPerMs = 0.5f / 1000f
-            val durationMs = dist / tilesPerMs
-            val moveStartMs = frameMs
-            while (true) {
-                frameMs = withFrameMillis { it }
-                cowAnimMs = frameMs.toFloat()
-                val t = ((frameMs - moveStartMs) / durationMs).coerceIn(0f, 1f)
-                cowCol = startCol + dCol * t
-                cowRow = startRow + dRow * t
-                if (t >= 1f) break
+
+            for (waypoint in waypoints) {
+                val startCol = cowCol
+                val startRow = cowRow
+                val dCol = waypoint.x - startCol
+                val dRow = waypoint.y - startRow
+                val dist = hypot(dCol, dRow)
+                if (dist < 0.05f) continue
+                cowFacingRight = dCol >= 0f
+
+                val durationMs = dist / tilesPerMs
+                val moveStartMs = frameMs
+                while (true) {
+                    frameMs = withFrameMillis { it }
+                    cowAnimMs = frameMs.toFloat()
+                    val t = ((frameMs - moveStartMs) / durationMs).coerceIn(0f, 1f)
+                    cowCol = startCol + dCol * t
+                    cowRow = startRow + dRow * t
+                    if (t >= 1f) break
+                }
             }
         }
     }
@@ -161,25 +243,29 @@ fun FarmGridCanvas(
                     scale = newScale
                 }
             }
-            .pointerInput(cells, gridConfig) {
+            .pointerInput(cells, gridConfig, isRepositioningBuilding) {
                 detectTapGestures { tapOffset ->
                     val canvasCenter = Offset(size.width / 2f, size.height / 2f)
                     val contentPoint = (tapOffset - canvasCenter - pan) / scale + canvasCenter
                     val tileW = tileWidthDp.dp.toPx()
                     val tileH = tileHeightDp.dp.toPx()
                     val gridOriginOffset = gridOrigin(canvasCenter, tileW, tileH, gridConfig.cols, gridConfig.rows)
-                    var hitId: Int? = null
+                    var hitCell: UiCell? = null
                     for (cell in cells) {
                         val cx = gridOriginOffset.x + GridMath.isoX(cell.col, cell.row, tileW)
                         val cy = gridOriginOffset.y + GridMath.isoY(cell.col, cell.row, tileH)
                         val dx = abs(contentPoint.x - cx)
                         val dy = abs(contentPoint.y - cy)
                         if (dx / (tileW / 2f) + dy / (tileH / 2f) <= 1f) {
-                            hitId = cell.id
+                            hitCell = cell
                             break
                         }
                     }
-                    hitId?.let(onCellTapped)
+                    if (isRepositioningBuilding) {
+                        hitCell?.let { onRepositionTarget(it.col, it.row) }
+                    } else {
+                        hitCell?.let { onCellTapped(it.id) }
+                    }
                 }
             }
     ) {
@@ -187,8 +273,22 @@ fun FarmGridCanvas(
         val tileW = tileWidthDp.dp.toPx()
         val tileH = tileHeightDp.dp.toPx()
         val originOffset = gridOrigin(canvasCenter, tileW, tileH, gridConfig.cols, gridConfig.rows)
-        val buildingAnchorCol = GridMath.buildingAnchorCol(gridConfig.cols)
-        val buildingAnchorRow = GridMath.buildingAnchorRow(gridConfig.rows)
+        val buildingAnchorCol = gridConfig.buildingAnchorCol
+        val buildingAnchorRow = gridConfig.buildingAnchorRow
+
+        // "Move barn" placement affordance: a candidate anchor is valid if its 2x2
+        // footprint fits inside the buildable ring and every one of those 4 cells is
+        // either empty or already part of the *current* barn (tapping its own spot is
+        // a harmless no-op). Mirrors FarmRepository.isValidBuildingTarget's rule, just
+        // computed locally from the already-loaded `cells` for instant visual feedback.
+        fun isValidRepositionAnchor(col: Int, row: Int): Boolean {
+            if (!GridMath.isValidBuildingAnchor(col, row, gridConfig.cols, gridConfig.rows)) return false
+            val targets = listOf(col to row, col + 1 to row, col to row + 1, col + 1 to row + 1)
+            return targets.all { (c, r) ->
+                val target = cells.find { it.col == c && it.row == r }
+                target != null && (target.occupantType == OccupantType.EMPTY || target.isBuildingCell)
+            }
+        }
 
         // Continuous ground plane covering the entire visible canvas (unaffected by
         // scale/pan — drawn once in raw canvas coordinates), so panning/zooming never
@@ -206,7 +306,10 @@ fun FarmGridCanvas(
             val h = tileH * scale
 
             val fillColor = when {
-                cell.isBuildingCell -> Color(0xFFD84315)
+                // A warm soil brown (rather than the old bright red-orange) reads as
+                // packed dirt around the barn's own wood/roof palette instead of a
+                // jarring "sticker" patch — part of grounding the barn visually.
+                cell.isBuildingCell -> Color(0xFF9C7B4A)
                 cell.occupantType == OccupantType.PATH -> Color(0xFFBCAAA4)
                 cell.occupantType == OccupantType.WHEAT -> Color(0xFFDCEDC8)
                 // Beyond the buildable radius reads as the same green ground as everywhere
@@ -226,6 +329,15 @@ fun FarmGridCanvas(
 
             if (cell.id == highlightedCellId) {
                 drawPath(diamond, color = Color(0xFFFFEE58), style = Stroke(width = 4f * scale))
+            }
+
+            // "Move barn" mode: mark every cell that's a valid new anchor (top-left
+            // corner of the relocated 2x2 footprint) so the player knows where a tap
+            // will land the building, instead of discovering valid/invalid spots by
+            // trial and error.
+            if (isRepositioningBuilding && isValidRepositionAnchor(cell.col, cell.row)) {
+                drawPath(diamond, color = Color(0x8033C6FF))
+                drawPath(diamond, color = Color(0xFF1E88E5), style = Stroke(width = 2.5f * scale))
             }
 
             when (cell.occupantType) {
@@ -254,24 +366,46 @@ fun FarmGridCanvas(
             }
         }
 
-        // Draw the central 2x2 farm building last, on top of every tile in the
-        // grid, so it's never occluded by a neighboring building cell's diamond
-        // fill (the bug: drawing it mid-loop on the "primary" cell meant the
-        // other 3 building cells, which sort later along col+row, painted their
-        // ground diamonds over most of the already-drawn house). Position
-        // computed the same way the old inline code did, centered on the 2x2
-        // footprint. The building itself is now a real parsed/flat-shaded 3D
-        // barn mesh (precomputed once in BarnMesh, not per-frame): each
-        // triangle's normalized (tile-relative) offsets are scaled by tileW
-        // (uniformly for both axes — see BarnMesh doc for why) and the current
-        // scale, then filled in the mesh's precomputed back-to-front order.
-        run {
+        // Central 2x2 farm building. Position computed the same way the old
+        // inline code did, centered on the 2x2 footprint. The building itself
+        // is a real parsed/flat-shaded 3D barn mesh (precomputed once in
+        // BarnMesh, not per-frame): each triangle's normalized (tile-relative)
+        // offsets are scaled by tileW (uniformly for both axes — see BarnMesh
+        // doc for why) and the current scale, then filled in the mesh's
+        // precomputed back-to-front order. Wrapped in a lambda (rather than
+        // drawn unconditionally here) so it can be interleaved with the cow
+        // below in true depth order — see the painter's-algorithm dispatch
+        // after both lambdas.
+        val drawBarn: () -> Unit = {
             val centerCol = buildingAnchorCol + 0.5f
             val centerRow = buildingAnchorRow + 0.5f
             val bBaseCx = originOffset.x + GridMath.isoX(centerCol, centerRow, tileW)
             val bBaseCy = originOffset.y + GridMath.isoY(centerCol, centerRow, tileH)
             val bx = (bBaseCx - canvasCenter.x) * scale + canvasCenter.x + pan.x
             val by = (bBaseCy - canvasCenter.y) * scale + canvasCenter.y + pan.y
+
+            // Soft contact shadow, ground-plane-flat (an iso-proportioned ellipse, not
+            // a screen-space circle) under the barn's floor anchor. This is most of
+            // what was making the barn read as "a photo pasted on the game": a flat-
+            // shaded mesh with a hard silhouette and no contact with the ground below
+            // it looks like a cutout sticker. A soft dark-to-transparent radial falloff
+            // anchors it to the dirt instead of floating over it.
+            val shadowRx = tileW * scale * 1.05f
+            val shadowRy = tileH * scale * 0.85f
+            drawOval(
+                brush = Brush.radialGradient(
+                    colorStops = arrayOf(
+                        0f to Color(0x66231A0F),
+                        0.7f to Color(0x33231A0F),
+                        1f to Color(0x00231A0F)
+                    ),
+                    center = Offset(bx, by),
+                    radius = shadowRx
+                ),
+                topLeft = Offset(bx - shadowRx, by - shadowRy),
+                size = Size(shadowRx * 2f, shadowRy * 2f)
+            )
+
             for (tri in barnTriangles) {
                 val p0x = bx + tri.normX0 * tileW * scale
                 val p0y = by + tri.normY0 * tileW * scale
@@ -291,13 +425,11 @@ fun FarmGridCanvas(
 
         // Decorative wandering cow: purely cosmetic, not part of `cells` and never
         // hit-tested (see the tap handler above, which only ever iterates `cells`).
-        // Position is driven by the free-floating cowCol/cowRow coroutine above.
-        // Drawn after the barn (in front of it always, rather than true depth
-        // sorting against the barn mesh — an acceptable simplification for a
-        // small roaming decoration) and before the fence, which the cow can
-        // never reach anyway since its wander targets are restricted to
-        // isWithinBuildableRadius cells, the same interior area the fence encloses.
-        if (cowCol >= 0f) {
+        // Position is driven by the free-floating cowCol/cowRow coroutine above,
+        // which already keeps it clear of the barn's footprint (see the
+        // rectangle-avoidance path planning there) — this lambda only handles
+        // the remaining "which one paints on top" question for near-barn tiles.
+        val drawCow: () -> Unit = {
             val cowBaseCx = originOffset.x + GridMath.isoX(cowCol, cowRow, tileW)
             val cowBaseCy = originOffset.y + GridMath.isoY(cowCol, cowRow, tileH)
             val ccx = (cowBaseCx - canvasCenter.x) * scale + canvasCenter.x + pan.x
@@ -305,7 +437,12 @@ fun FarmGridCanvas(
             val walkPhase = cowAnimMs / 140f
             val stride = kotlin.math.sin(walkPhase)
             val bob = kotlin.math.abs(stride) * 3f
-            val cowUnitScale = (tileW * scale) / 46f
+            // The cow silhouette in drawWanderingCow spans ~77 units wide at its
+            // 46px reference tile (its horns/tail overshoot the body's core box),
+            // so dividing by 46 (1 tile-width = 1 unit) rendered it ~1.7x a cell.
+            // Dividing by 77 makes it match one cell; doubling that (154) makes
+            // the cow half a cell wide.
+            val cowUnitScale = (tileW * scale) / 154f
             drawWanderingCow(
                 cx = ccx,
                 cy = ccy - 18f * cowUnitScale,
@@ -314,6 +451,24 @@ fun FarmGridCanvas(
                 stride = stride,
                 bob = bob
             )
+        }
+
+        // True painter's-algorithm ordering between the two solid objects: the
+        // barn's iso-depth is its footprint center (buildingAnchorCol/Row + 1,
+        // matching the +0.5/+0.5 centerCol/centerRow above), the cow's is its
+        // own col+row. Whichever has the smaller col+row is further from the
+        // camera in this 2:1 iso projection and must paint first, so the
+        // nearer object's sprite correctly covers it on any tile where their
+        // screen-space silhouettes still touch (e.g. right at the barn's
+        // walls), instead of the cow always winning regardless of position.
+        val barnDepth = buildingAnchorCol + buildingAnchorRow + 1
+        val cowDepth = cowCol + cowRow
+        if (cowCol >= 0f && cowDepth < barnDepth) {
+            drawCow()
+            drawBarn()
+        } else {
+            drawBarn()
+            if (cowCol >= 0f) drawCow()
         }
 
         // Decorative fence lining the buildable-area boundary: one precomputed
@@ -341,8 +496,25 @@ fun FarmGridCanvas(
                     // mitering).
                     val isColumnEdge = row == 0 || row == gridConfig.rows - 1
                     val variant = if (isColumnEdge) fenceVariants.alongColumns else fenceVariants.alongRows
-                    val fBaseCx = originOffset.x + GridMath.isoX(col, row, tileW)
-                    val fBaseCy = originOffset.y + GridMath.isoY(col, row, tileH)
+                    // Anchoring at the border cell's own center (col, row) split
+                    // each fence module across the cell/outside boundary. Shift
+                    // the anchor half a cell outward along whichever axis is
+                    // pinned at an extreme, so the fence module sits fully
+                    // outside the playable ring instead of straddling it. Corner
+                    // cells are pinned on both axes and get both shifts, landing
+                    // the post at the outer corner point.
+                    val fenceCol = col + when (col) {
+                        0 -> -0.5f
+                        gridConfig.cols - 1 -> 0.5f
+                        else -> 0f
+                    }
+                    val fenceRow = row + when (row) {
+                        0 -> -0.5f
+                        gridConfig.rows - 1 -> 0.5f
+                        else -> 0f
+                    }
+                    val fBaseCx = originOffset.x + GridMath.isoX(fenceCol, fenceRow, tileW)
+                    val fBaseCy = originOffset.y + GridMath.isoY(fenceCol, fenceRow, tileH)
                     val fx = (fBaseCx - canvasCenter.x) * scale + canvasCenter.x + pan.x
                     val fy = (fBaseCy - canvasCenter.y) * scale + canvasCenter.y + pan.y
                     for (tri in variant) {
