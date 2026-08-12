@@ -18,7 +18,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.farmmathbuilder.app.domain.OccupantType
+import com.farmmathbuilder.app.data.repository.FarmRepository
+import com.farmmathbuilder.app.domain.isCrop
 import com.farmmathbuilder.app.domain.SlotAvailability
 import com.farmmathbuilder.app.ui.components.CellActionDialog
 import com.farmmathbuilder.app.ui.components.ConfettiOverlay
@@ -104,7 +105,7 @@ fun FarmScreen(
                 modifier = Modifier.align(Alignment.BottomEnd)
             )
 
-            val hasWheatOnMap = uiState.cells.any { it.occupantType == OccupantType.WHEAT }
+            val hasGrowingCropOnMap = uiState.cells.any { it.occupantType.isCrop() }
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -118,7 +119,7 @@ fun FarmScreen(
 
                 if (!uiState.isRepositioningBuilding) {
                     MoveBarnButton(
-                        enabled = !hasWheatOnMap,
+                        enabled = !hasGrowingCropOnMap,
                         onClick = { viewModel.startRepositioningBuilding() }
                     )
                 }
@@ -145,8 +146,10 @@ fun FarmScreen(
                     CellActionDialog(
                         cell = cell,
                         slotAvailability = availability,
+                        carrotUnlocked = viewModel.isCarrotUnlocked(),
+                        carrotUnlockHarvestsRemaining = (FarmRepository.CARROT_UNLOCK_HARVESTS - (uiState.player?.fieldsCompletedTotal ?: 0)).coerceAtLeast(0),
                         onDismiss = { viewModel.dismissCellPopup() },
-                        onBuildFree = { viewModel.buildFreeOrExtra(cellId) },
+                        onPlantCrop = { cropType -> viewModel.buildFreeOrExtra(cellId, cropType) },
                         onSolveExercise = {
                             viewModel.dismissCellPopup()
                             viewModel.openExercise()

@@ -13,33 +13,48 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.farmmathbuilder.app.domain.GrowthCalculator
+import com.farmmathbuilder.app.domain.OccupantType
 import com.farmmathbuilder.app.domain.SlotAvailability
 import com.farmmathbuilder.app.domain.UiCell
 
+private fun cropLabel(type: OccupantType): String = when (type) {
+    OccupantType.CARROT -> "carrot"
+    else -> "wheat"
+}
+
 /**
  * Popup shown when tapping an empty (buildable) cell or a growing crop.
- * Implements the decision table from BRD Section 6. For a growing cell it shows
- * a live countdown (recomputed every tick since `cell` is a fresh UiCell each
- * time the ViewModel's 1s ticker fires) plus cancel / "solve to save 1 minute".
+ * Implements the decision table from BRD Section 6. An empty cell now offers a
+ * choice of crop (wheat always available, carrot gated behind
+ * [carrotUnlocked] — see FarmRepository.CARROT_UNLOCK_HARVESTS) instead of a
+ * single "Build" button. For a growing cell it shows a live countdown
+ * (recomputed every tick since `cell` is a fresh UiCell each time the
+ * ViewModel's 1s ticker fires) plus cancel / "solve to save 1 minute".
  */
 @Composable
 fun CellActionDialog(
     cell: UiCell,
     slotAvailability: SlotAvailability,
+    carrotUnlocked: Boolean,
+    carrotUnlockHarvestsRemaining: Int,
     onDismiss: () -> Unit,
-    onBuildFree: () -> Unit,
+    onPlantCrop: (OccupantType) -> Unit,
     onSolveExercise: () -> Unit,
     onCancelGrowth: () -> Unit,
     onSolveToSaveTime: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (cell.isEmpty) "Build a wheat field?" else "Growing wheat") },
+        title = { Text(if (cell.isEmpty) "Plant a crop?" else "Growing ${cropLabel(cell.occupantType)}") },
         text = {
             Column {
                 when {
                     cell.isEmpty && slotAvailability != SlotAvailability.NONE_AVAILABLE -> {
-                        Text("Plant a wheat seed here. It will take about 10 minutes to grow.")
+                        Text("Choose a crop for this field. Wheat and carrot both take about 10 minutes to grow.")
+                        if (!carrotUnlocked) {
+                            Spacer(Modifier.height(4.dp))
+                            Text("Carrot unlocks in $carrotUnlockHarvestsRemaining more harvest${if (carrotUnlockHarvestsRemaining == 1) "" else "s"}.")
+                        }
                     }
                     cell.isEmpty -> {
                         Text("You've used all your free fields today. Solve a math problem to unlock one more!")
@@ -70,7 +85,12 @@ fun CellActionDialog(
             Column(horizontalAlignment = Alignment.End) {
                 when {
                     cell.isEmpty && slotAvailability != SlotAvailability.NONE_AVAILABLE -> {
-                        Button(onClick = onBuildFree) { Text("Build") }
+                        Button(onClick = { onPlantCrop(OccupantType.WHEAT) }) { Text("Plant wheat") }
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = { onPlantCrop(OccupantType.CARROT) },
+                            enabled = carrotUnlocked
+                        ) { Text(if (carrotUnlocked) "Plant carrot" else "Plant carrot 🔒") }
                     }
                     cell.isEmpty -> {
                         Button(onClick = onSolveExercise) { Text("Solve exercise") }

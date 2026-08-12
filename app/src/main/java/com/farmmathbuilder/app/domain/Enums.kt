@@ -5,8 +5,14 @@ enum class OccupantType {
     EMPTY,
     WHEAT,
     PATH,
-    BUILDING
+    BUILDING,
+    CARROT
 }
+
+/** WHEAT and CARROT are both real growable crops — they share every growth-phase,
+ * harvest, cancel, and "solve to save time" rule; PATH/BUILDING/EMPTY are not. Single
+ * source of truth so a future third crop only needs one line changed here. */
+fun OccupantType.isCrop(): Boolean = this == OccupantType.WHEAT || this == OccupantType.CARROT
 
 /** Growth phase of a Wheat occupant. NONE is used for non-wheat cells. */
 enum class GrowthPhase {

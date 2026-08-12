@@ -16,8 +16,8 @@ data class UiCell(
     val isWithinBuildableRadius: Boolean
 ) {
     val isEmpty: Boolean get() = occupantType == OccupantType.EMPTY
-    val isMature: Boolean get() = occupantType == OccupantType.WHEAT && growthPhase == GrowthPhase.MATURE
-    val isGrowing: Boolean get() = occupantType == OccupantType.WHEAT && growthPhase != GrowthPhase.MATURE && growthPhase != GrowthPhase.NONE
+    val isMature: Boolean get() = occupantType.isCrop() && growthPhase == GrowthPhase.MATURE
+    val isGrowing: Boolean get() = occupantType.isCrop() && growthPhase != GrowthPhase.MATURE && growthPhase != GrowthPhase.NONE
 }
 
 /** What kind of daily slot a build attempt would consume, per the BR decision table. */

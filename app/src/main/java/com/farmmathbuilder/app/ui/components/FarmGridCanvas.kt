@@ -34,6 +34,7 @@ import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.GridMath
 import com.farmmathbuilder.app.domain.GrowthPhase
 import com.farmmathbuilder.app.domain.OccupantType
+import com.farmmathbuilder.app.domain.isCrop
 import com.farmmathbuilder.app.domain.PathType
 import com.farmmathbuilder.app.domain.UiCell
 import kotlin.math.abs
@@ -311,7 +312,7 @@ fun FarmGridCanvas(
                 // jarring "sticker" patch — part of grounding the barn visually.
                 cell.isBuildingCell -> Color(0xFF9C7B4A)
                 cell.occupantType == OccupantType.PATH -> Color(0xFFBCAAA4)
-                cell.occupantType == OccupantType.WHEAT -> Color(0xFFDCEDC8)
+                cell.occupantType.isCrop() -> Color(0xFFDCEDC8)
                 // Beyond the buildable radius reads as the same green ground as everywhere
                 // else now (was a distinct grey) — the fence alone marks the true limit.
                 else -> Color(0xFF9CCC65)
@@ -351,6 +352,9 @@ fun FarmGridCanvas(
                 }
                 OccupantType.WHEAT -> {
                     drawWheatTile(cx, cy, w, h, cell.growthPhase, cell.growthProgress, cell.id)
+                }
+                OccupantType.CARROT -> {
+                    drawCarrotTile(cx, cy, w, h, cell.growthPhase, cell.growthProgress, cell.id)
                 }
                 OccupantType.PATH -> {
                     drawPathPiece(cx, cy, w, h, cell.pathType, cell.pathRotationDegrees)
@@ -840,6 +844,195 @@ private fun DrawScope.drawWheatTile(
         }
         GrowthPhase.NONE -> {
             // Wheat cells should never be NONE, but keep the branch for
+            // exhaustiveness — nothing to draw.
+        }
+    }
+}
+
+/**
+ * Renders a carrot cell using the same full-tile procedural approach as
+ * [drawWheatTile] — soil furrows, seed dots, scattered strokes filling the
+ * whole diamond footprint — but with curved, feathery leaf fronds instead of
+ * straight wheat blades, and orange root accents woven through every phase
+ * (not just Mature): a couple of the Seed phase's seed dots are warm orange
+ * instead of plain soil brown, Sprout/Plant show small orange root-tips
+ * breaking the surface, and Mature has denser shoulders each with a short
+ * tapering root-tip stroke. Ported 1:1 from design option A ("wheat-style
+ * continuation") in docs/previews/carrot-preview.html, including its
+ * "more orange" revision. Deterministic per-[seed] like [drawWheatTile], via
+ * a distinct multiplier (`* 37 + ... * 11`) on the shared [scatterPointsInDiamond]
+ * seed so the two crops' scatter layouts never accidentally coincide.
+ */
+private fun DrawScope.drawCarrotTile(
+    cx: Float,
+    cy: Float,
+    w: Float,
+    h: Float,
+    phase: GrowthPhase,
+    progress: Float,
+    seed: Int
+) {
+    val scaleFactor = (w / 56f).coerceAtLeast(0.05f)
+    val furrowDir = run {
+        val len = hypot(w, h)
+        if (len == 0f) Offset(1f, 0f) else Offset(w / len, h / len)
+    }
+    val soilDark = Color(0xFF6D4C41)
+    val seedFleckColors = listOf(
+        Color(0xFF7A4A1E), Color(0xFF7A4A1E), Color(0xFF7A4A1E),
+        Color(0xFFD9812F), Color(0xFFD9812F)
+    )
+
+    fun drawFurrows(count: Int, alpha: Float, minLocalY: Float) {
+        val pts = scatterPointsInDiamond(seed * 37 + phase.ordinal * 11 + 101, count, w, h, margin = 0.75f)
+        val lenHalf = furrowDir * (min(w, h) * 0.18f)
+        for (p in pts) {
+            if (p.y < minLocalY) continue
+            val center = Offset(cx + p.x, cy + p.y)
+            drawLine(
+                color = soilDark.copy(alpha = alpha),
+                start = center - lenHalf,
+                end = center + lenHalf,
+                strokeWidth = 1.6f * scaleFactor
+            )
+        }
+    }
+
+    fun drawSeedDots(count: Int) {
+        val pts = scatterPointsInDiamond(seed * 37 + phase.ordinal * 11 + 202, count, w, h, margin = 0.7f)
+        val rnd = Random(seed * 37 + phase.ordinal * 11 + 203)
+        for (p in pts) {
+            drawCircle(
+                color = seedFleckColors[rnd.nextInt(seedFleckColors.size)],
+                radius = 1.4f * scaleFactor,
+                center = Offset(cx + p.x, cy + p.y)
+            )
+        }
+    }
+
+    fun drawLeafFronds(count: Int, seedOffset: Int, heightFactor: Float, colors: List<Color>) {
+        val pts = scatterPointsInDiamond(seed * 37 + phase.ordinal * 11 + seedOffset, count, w, h, margin = 0.82f)
+        val rnd = Random(seed * 37 + phase.ordinal * 11 + seedOffset + 1)
+        for (p in pts) {
+            val base = Offset(cx + p.x, cy + p.y)
+            val frondH = min(w, h) * (0.22f + rnd.nextFloat() * 0.14f) * heightFactor
+            val tilt = (rnd.nextFloat() - 0.5f) * frondH * 0.6f
+            val color = colors[rnd.nextInt(colors.size)]
+            val stroke = Stroke(width = 1.8f * scaleFactor, cap = StrokeCap.Round)
+            // Two thin curved fronds instead of one straight blade — reads as
+            // a ferny carrot top rather than a wheat blade.
+            val frondA = Path().apply {
+                moveTo(base.x, base.y)
+                quadraticTo(base.x + tilt * 0.5f, base.y - frondH * 0.6f, base.x + tilt, base.y - frondH)
+            }
+            drawPath(frondA, color = color, style = stroke)
+            val frondB = Path().apply {
+                moveTo(base.x, base.y)
+                quadraticTo(base.x - tilt * 0.3f, base.y - frondH * 0.5f, base.x - tilt * 0.6f, base.y - frondH * 0.85f)
+            }
+            drawPath(frondB, color = color, style = stroke)
+        }
+    }
+
+    fun drawRootTips(count: Int, seedOffset: Int, radiusFactor: Float) {
+        // Small glimpses of orange root breaking the soil under the leaf
+        // scatter — carries the crop's orange identity through Sprout/Plant
+        // instead of only appearing once Mature.
+        val pts = scatterPointsInDiamond(seed * 37 + phase.ordinal * 11 + seedOffset, count, w, h, margin = 0.6f)
+        for (p in pts) {
+            val r = min(w, h) * radiusFactor
+            drawOval(
+                color = Color(0xFFEE8B33),
+                topLeft = Offset(cx + p.x - r, cy + p.y - r * 0.6f),
+                size = Size(r * 2f, r * 1.2f)
+            )
+        }
+    }
+
+    fun drawShoulders(count: Int) {
+        val pts = scatterPointsInDiamond(seed * 37 + phase.ordinal * 11 + 707, count, w, h, margin = 0.55f)
+        val rnd = Random(seed * 37 + phase.ordinal * 11 + 708)
+        for (p in pts) {
+            val base = Offset(cx + p.x, cy + p.y)
+            val rw = min(w, h) * (0.09f + rnd.nextFloat() * 0.03f)
+            drawOval(
+                color = Color(0xFFE8792A),
+                topLeft = Offset(base.x - rw, base.y - rw * 0.6f),
+                size = Size(rw * 2f, rw * 1.2f)
+            )
+            drawOval(
+                color = Color(0x26000000),
+                topLeft = Offset(base.x - rw, base.y - rw * 0.6f),
+                size = Size(rw * 2f, rw * 1.2f),
+                style = Stroke(width = 1f)
+            )
+            // A short tapering root-tip stroke below the shoulder, so it reads
+            // as a carrot breaking the surface rather than a flat orange dot.
+            drawLine(
+                color = Color(0xFFD46A22),
+                start = Offset(base.x, base.y + rw * 0.3f),
+                end = Offset(base.x + (rnd.nextFloat() - 0.5f) * rw, base.y + rw * 1.6f),
+                strokeWidth = rw * 0.5f,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+
+    when (phase) {
+        GrowthPhase.SEED -> {
+            drawFurrows(count = 6, alpha = 0.85f, minLocalY = -h)
+            drawSeedDots(count = 5)
+        }
+        GrowthPhase.SPROUT -> {
+            drawFurrows(count = 3, alpha = 0.55f, minLocalY = h * 0.05f)
+            val heightFactor = 0.55f + 0.25f * progress
+            drawLeafFronds(
+                count = 9,
+                seedOffset = 303,
+                heightFactor = heightFactor,
+                colors = listOf(Color(0xFF66BB6A), Color(0xFF43A047), Color(0xFF2E7D32))
+            )
+            drawRootTips(count = 2, seedOffset = 909, radiusFactor = 0.045f)
+        }
+        GrowthPhase.PLANT -> {
+            drawFurrows(count = 2, alpha = 0.3f, minLocalY = h * 0.3f)
+            val heightFactor = 0.8f + 0.25f * progress
+            drawLeafFronds(
+                count = 13,
+                seedOffset = 404,
+                heightFactor = heightFactor,
+                colors = listOf(Color(0xFF43A047), Color(0xFF2E7D32), Color(0xFF1B5E20))
+            )
+            drawRootTips(count = 4, seedOffset = 910, radiusFactor = 0.06f)
+        }
+        GrowthPhase.MATURE -> {
+            val diamond = Path().apply {
+                moveTo(cx, cy - h / 2f)
+                lineTo(cx + w / 2f, cy)
+                lineTo(cx, cy + h / 2f)
+                lineTo(cx - w / 2f, cy)
+                close()
+            }
+            drawPath(
+                diamond,
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color(0x40FFFFFF), Color(0x00FFFFFF), Color(0x33000000)),
+                    startY = cy - h / 2f,
+                    endY = cy + h / 2f
+                )
+            )
+            drawLeafFronds(
+                count = 13,
+                seedOffset = 505,
+                heightFactor = 1f,
+                colors = listOf(Color(0xFF2E7D32), Color(0xFF1B5E20), Color(0xFF43A047))
+            )
+            // Full carrot shoulders + root-tip strokes — the tile should read
+            // unmistakably orange/carrot at Mature, not just green.
+            drawShoulders(count = 8)
+        }
+        GrowthPhase.NONE -> {
+            // Carrot cells should never be NONE, but keep the branch for
             // exhaustiveness — nothing to draw.
         }
     }

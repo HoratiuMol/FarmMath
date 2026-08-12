@@ -1,0 +1,564 @@
+<title>Farm Carrot — Design Options</title>
+<style>
+  :root {
+    --bg: #f3eee1; --panel: #fbf8f0; --ink: #2c2418; --muted: #7a6f5c;
+    --accent: #d9812f; --line: #e4dac4;
+    --tile: #DCEDC8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1812; --panel: #24201a; --ink: #f1ead9; --muted: #a79a82;
+      --accent: #e8a34f; --line: #362f23;
+      --tile: #4f6a3a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1812; --panel: #24201a; --ink: #f1ead9; --muted: #a79a82;
+    --accent: #e8a34f; --line: #362f23;
+    --tile: #4f6a3a;
+  }
+  :root[data-theme="light"] {
+    --bg: #f3eee1; --panel: #fbf8f0; --ink: #2c2418; --muted: #7a6f5c;
+    --accent: #d9812f; --line: #e4dac4;
+    --tile: #DCEDC8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 40px 24px 64px; }
+  header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  h1 { font-size: clamp(26px, 4vw, 34px); line-height: 1.1; margin: 0; font-weight: 700; text-wrap: balance; }
+  .subtitle { color: var(--muted); font-size: 14.5px; max-width: 74ch; line-height: 1.55; margin: 0; }
+  .rows { display: flex; flex-direction: column; gap: 20px; }
+  .row-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .row-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .letter {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-size: 13px; font-weight: 700; flex: none;
+  }
+  .row-head h2 { font-size: 16px; margin: 0; font-weight: 700; }
+  .picked {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--accent); border: 1.5px solid var(--accent); border-radius: 999px;
+    padding: 3px 10px; margin-left: auto;
+  }
+  .row-card:has(.picked) { border-color: var(--accent); border-width: 2px; }
+  .desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0; }
+  .phases {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  }
+  .phase-card { display: flex; flex-direction: column; gap: 6px; }
+  .phase-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); font-weight: 600; text-align: center;
+  }
+  .stage {
+    border-radius: 10px; overflow: hidden; border: 1px solid var(--line);
+    background: var(--tile);
+  }
+  canvas { display: block; width: 100%; height: auto; }
+  .note {
+    font-size: 12.5px; color: var(--muted); line-height: 1.6;
+    border-top: 1px solid var(--line); padding-top: 14px; margin-top: 8px;
+  }
+  footer { margin-top: 28px; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Farm Math Builder &middot; Asset Preview</span>
+    <h1>Carrot crop, design options</h1>
+    <p class="subtitle">
+      Four visual directions for the new carrot crop, each shown across its
+      4 growth phases (Seed &rarr; Sprout &rarr; Plant &rarr; Mature), rendered
+      the same way the shipped wheat tile is — a full-diamond-tile procedural
+      pattern on the game's actual crop-tile ground color, not a centered
+      icon. Pick a letter and I'll build it into the real game the same way
+      <code>drawWheatTile</code> works today.
+    </p>
+  </header>
+
+  <div class="rows">
+    <div class="row-card">
+      <div class="row-head"><span class="letter">A</span><h2>Wheat-style continuation</h2><span class="picked">Selected — building this one</span></div>
+      <p class="desc">Same visual grammar as the shipped wheat tile (soil furrows, seed dots, scattered blade strokes) — feathery green tops instead of wheat blades. <strong>Revised per feedback</strong> to carry more orange earlier: a couple of Seed-phase flecks are warm orange instead of plain soil brown, Sprout/Plant now show small orange root-tips breaking the surface as the plant fills in, and Mature has more/larger shoulders each with a short tapering root-tip stroke, so the tile reads unmistakably "carrot" rather than "green tuft with an orange dot." Reuses the exact same helper functions (furrows/seed-dots/scatter-blades) already in <code>FarmGridCanvas.kt</code>, just re-tuned colors/shapes.</p>
+      <div class="phases" id="rowA"></div>
+    </div>
+
+    <div class="row-card">
+      <div class="row-head"><span class="letter">B</span><h2>Chibi bunch</h2></div>
+      <p class="desc">Cute, rounded, thick-outlined carrots — same friendly "chibi sticker" language as the cow's design B. Bright saturated orange against dark outlines reads clearly at small tile size and feels distinctly celebratory at Mature (a little bunch of carrots, not just a texture). Most work to add (new shape vocabulary, not reused wheat helpers) but strongest "kid-appeal" payoff.</p>
+      <div class="phases" id="rowB"></div>
+    </div>
+
+    <div class="row-card">
+      <div class="row-head"><span class="letter">C</span><h2>Flat paper-cutout</h2></div>
+      <p class="desc">Geometric flat-color shapes, soft drop shadow, no outlines — minimal and quick to scan, closest in spirit to a clean mobile-game art style. A calmer, more "designed" look than A, but a visibly different rendering technique (polygons, not scattered strokes) so it'd read as a deliberate style upgrade rather than "the same field, orange version."</p>
+      <div class="phases" id="rowC"></div>
+    </div>
+
+    <div class="row-card">
+      <div class="row-head"><span class="letter">D</span><h2>Pixel art</h2></div>
+      <p class="desc">Small retro pixel sprite per phase (color-grid rendering, no shape math — cheapest to draw). Reads as a distinct "8-bit" language next to the soft-shaded wheat/barn/fence art elsewhere in the game; only worth it if a pixel-art crop line is wanted deliberately rather than as a one-off.</p>
+      <div class="phases" id="rowD"></div>
+    </div>
+  </div>
+
+  <p class="note">
+    All four sit on the same tile background color the real WHEAT/crop cells already use
+    (<code>0xFFDCEDC8</code>) so scale/contrast reads the same as in-game. This is a static
+    design/scale preview only — the shipped version would keep the existing per-cell
+    deterministic seeding (no reshuffle on tick recomposition) and the Mature phase's
+    subtle light-direction gradient, same as <code>drawWheatTile</code> today.
+  </p>
+  <footer>Farm Math Builder — internal asset preview, not shipped UI</footer>
+</main>
+
+<script>
+"use strict";
+
+const TILE_W = 112, TILE_H = 60;
+const PHASES = ["Seed", "Sprout", "Plant", "Mature"];
+
+// ---------- Deterministic RNG + scatter helper (mirrors GridMath-adjacent scatterPointsInDiamond) ----------
+function mulberry32(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function scatterPoints(seed, count, w, h, margin) {
+  const rng = mulberry32(seed);
+  const pts = [];
+  let guard = 0;
+  while (pts.length < count && guard < count * 60) {
+    guard++;
+    const rx = (rng() * 2 - 1) * (w / 2) * margin;
+    const ry = (rng() * 2 - 1) * (h / 2) * margin;
+    if (Math.abs(rx) / (w / 2) + Math.abs(ry) / (h / 2) <= 1) pts.push({ x: rx, y: ry });
+  }
+  return pts;
+}
+
+function drawTileBg(ctx, cx, cy, w, h) {
+  const cs = getComputedStyle(document.documentElement);
+  ctx.fillStyle = cs.getPropertyValue("--tile").trim();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - h / 2);
+  ctx.lineTo(cx + w / 2, cy);
+  ctx.lineTo(cx, cy + h / 2);
+  ctx.lineTo(cx - w / 2, cy);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ============================================================
+// A — Wheat-style continuation
+// ============================================================
+function drawFurrowsA(ctx, cx, cy, w, h, seed, count, alpha, minLocalY) {
+  const pts = scatterPoints(seed * 31 + 101, count, w, h, 0.75);
+  const len = Math.hypot(w, h) || 1;
+  const dx = (w / len) * Math.min(w, h) * 0.18;
+  const dy = (h / len) * Math.min(w, h) * 0.18;
+  ctx.strokeStyle = `rgba(109,76,65,${alpha})`;
+  ctx.lineWidth = 1.6 * (w / 112);
+  for (const p of pts) {
+    if (p.y < minLocalY) continue;
+    ctx.beginPath();
+    ctx.moveTo(cx + p.x - dx, cy + p.y - dy);
+    ctx.lineTo(cx + p.x + dx, cy + p.y + dy);
+    ctx.stroke();
+  }
+}
+
+function drawSeedDotsA(ctx, cx, cy, w, h, seed, count, colors) {
+  const pts = scatterPoints(seed * 31 + 202, count, w, h, 0.7);
+  const rng = mulberry32(seed * 31 + 203);
+  for (const p of pts) {
+    ctx.fillStyle = colors[Math.floor(rng() * colors.length)];
+    ctx.beginPath();
+    ctx.arc(cx + p.x, cy + p.y, 1.6 * (w / 112), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawRootTipsA(ctx, cx, cy, w, h, seed, count, seedOffset, radiusFactor) {
+  // Small glimpses of orange root breaking the soil under the leaf scatter —
+  // makes the crop identity ("this will be a carrot") readable from Sprout
+  // onward instead of only appearing once Mature.
+  const pts = scatterPoints(seed * 31 + seedOffset, count, w, h, 0.6);
+  for (const p of pts) {
+    const r = Math.min(w, h) * radiusFactor;
+    ctx.fillStyle = "#EE8B33";
+    ctx.beginPath();
+    ctx.ellipse(cx + p.x, cy + p.y, r, r * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawLeafBladesA(ctx, cx, cy, w, h, seed, count, seedOffset, heightFactor, colors, feathery) {
+  const pts = scatterPoints(seed * 31 + seedOffset, count, w, h, 0.82);
+  const rng = mulberry32(seed * 31 + seedOffset + 1);
+  ctx.lineCap = "round";
+  for (const p of pts) {
+    const baseX = cx + p.x, baseY = cy + p.y;
+    const bladeH = Math.min(w, h) * (0.22 + rng() * 0.14) * heightFactor;
+    const tilt = (rng() - 0.5) * bladeH * 0.6;
+    ctx.strokeStyle = colors[Math.floor(rng() * colors.length)];
+    ctx.lineWidth = 1.8 * (w / 112);
+    if (feathery) {
+      // two thin fronds instead of one straight blade -> reads as ferny carrot top
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.quadraticCurveTo(baseX + tilt * 0.5, baseY - bladeH * 0.6, baseX + tilt, baseY - bladeH);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.quadraticCurveTo(baseX - tilt * 0.3, baseY - bladeH * 0.5, baseX - tilt * 0.6, baseY - bladeH * 0.85);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.lineTo(baseX + tilt, baseY - bladeH);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawCarrotShouldersA(ctx, cx, cy, w, h, seed, count) {
+  const pts = scatterPoints(seed * 31 + 707, count, w, h, 0.55);
+  const rng = mulberry32(seed * 31 + 708);
+  for (const p of pts) {
+    const baseX = cx + p.x, baseY = cy + p.y;
+    const rw = Math.min(w, h) * (0.09 + rng() * 0.03);
+    // shoulder (the visible top of the root)
+    ctx.fillStyle = "#E8792A";
+    ctx.beginPath();
+    ctx.ellipse(baseX, baseY, rw, rw * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // a short tapering root-tip stroke below it, so it reads as a carrot
+    // breaking the surface rather than a flat orange dot
+    ctx.strokeStyle = "#D46A22";
+    ctx.lineWidth = rw * 0.5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY + rw * 0.3);
+    ctx.lineTo(baseX + (rng() - 0.5) * rw, baseY + rw * 1.6);
+    ctx.stroke();
+  }
+}
+
+function drawCarrotA(ctx, cx, cy, w, h, seed, phase) {
+  drawTileBg(ctx, cx, cy, w, h);
+  if (phase === 0) {
+    drawFurrowsA(ctx, cx, cy, w, h, seed, 6, 0.85, -h);
+    // seed dots now mix in a couple of warm orange flecks (not just dark
+    // soil brown) so the crop's identity hints at orange from tile one
+    drawSeedDotsA(ctx, cx, cy, w, h, seed, 5, ["#7A4A1E", "#7A4A1E", "#7A4A1E", "#D9812F", "#D9812F"]);
+  } else if (phase === 1) {
+    drawFurrowsA(ctx, cx, cy, w, h, seed, 3, 0.55, h * 0.05);
+    drawLeafBladesA(ctx, cx, cy, w, h, seed, 9, 303, 0.55, ["#66BB6A", "#43A047", "#2E7D32"], true);
+    // first hint of orange root breaking the soil at the base of a couple of sprouts
+    drawRootTipsA(ctx, cx, cy, w, h, seed, 2, 909, 0.045);
+  } else if (phase === 2) {
+    drawFurrowsA(ctx, cx, cy, w, h, seed, 2, 0.3, h * 0.3);
+    drawLeafBladesA(ctx, cx, cy, w, h, seed, 13, 404, 0.85, ["#43A047", "#2E7D32", "#1B5E20"], true);
+    // more roots visibly swelling through the soil as the plant fills in
+    drawRootTipsA(ctx, cx, cy, w, h, seed, 4, 910, 0.06);
+  } else {
+    const diamond = new Path2D();
+    diamond.moveTo(cx, cy - h / 2);
+    diamond.lineTo(cx + w / 2, cy);
+    diamond.lineTo(cx, cy + h / 2);
+    diamond.lineTo(cx - w / 2, cy);
+    diamond.closePath();
+    const grad = ctx.createLinearGradient(cx, cy - h / 2, cx, cy + h / 2);
+    grad.addColorStop(0, "rgba(255,255,255,0.25)");
+    grad.addColorStop(0.5, "rgba(255,255,255,0)");
+    grad.addColorStop(1, "rgba(0,0,0,0.2)");
+    ctx.fillStyle = grad;
+    ctx.fill(diamond);
+    drawLeafBladesA(ctx, cx, cy, w, h, seed, 13, 505, 1.0, ["#2E7D32", "#1B5E20", "#43A047"], true);
+    // full carrot shoulders + root-tip strokes, more of them than before —
+    // the tile should read unmistakably orange/carrot at Mature, not just green
+    drawCarrotShouldersA(ctx, cx, cy, w, h, seed, 8);
+  }
+}
+
+// ============================================================
+// B — Chibi bunch
+// ============================================================
+function outlinedShape(ctx, fill, path, lineWidth) {
+  ctx.fillStyle = fill;
+  ctx.fill(path);
+  ctx.strokeStyle = "#3a2f22";
+  ctx.lineWidth = lineWidth;
+  ctx.stroke(path);
+}
+
+function chibiCarrot(ctx, x, y, s, rng) {
+  const wobble = (rng() - 0.5) * 6;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(wobble * 0.02);
+  // root (triangle-ish rounded carrot body)
+  const body = new Path2D();
+  body.moveTo(-0.42 * s, -0.55 * s);
+  body.quadraticCurveTo(0, 0.65 * s, 0.03 * s, 0.72 * s);
+  body.quadraticCurveTo(0.1 * s, 0.65 * s, 0.42 * s, -0.55 * s);
+  body.quadraticCurveTo(0, -0.82 * s, -0.42 * s, -0.55 * s);
+  body.closePath();
+  outlinedShape(ctx, "#F2932E", body, 2.2 * (s / 60));
+  // ridges
+  ctx.strokeStyle = "rgba(180,90,20,0.5)";
+  ctx.lineWidth = 1.4 * (s / 60);
+  for (const t of [-0.15, 0.05, 0.22]) {
+    ctx.beginPath();
+    ctx.moveTo(-0.18 * s, t * s);
+    ctx.lineTo(0.2 * s, (t + 0.05) * s);
+    ctx.stroke();
+  }
+  // leafy pom-pom top
+  for (const [lx, ly, r] of [[-0.12 * s, -0.62 * s, 0.22 * s], [0.1 * s, -0.7 * s, 0.24 * s], [0.02 * s, -0.86 * s, 0.2 * s]]) {
+    const leaf = new Path2D();
+    leaf.ellipse(lx, ly, r, r * 0.7, 0, 0, Math.PI * 2);
+    outlinedShape(ctx, "#66BB6A", leaf, 2 * (s / 60));
+  }
+  ctx.restore();
+}
+
+function chibiSeedling(ctx, x, y, s, rng) {
+  ctx.save();
+  ctx.translate(x, y);
+  const path = new Path2D();
+  path.ellipse(0, 0, 0.16 * s, 0.24 * s, 0, 0, Math.PI * 2);
+  outlinedShape(ctx, "#7CB342", path, 2 * (s / 60));
+  ctx.restore();
+}
+
+function drawCarrotB(ctx, cx, cy, w, h, seed, phase) {
+  drawTileBg(ctx, cx, cy, w, h);
+  const rng = mulberry32(seed * 31 + phase * 13);
+  if (phase === 0) {
+    // dirt mound + a couple of tiny seed flecks
+    const mound = new Path2D();
+    mound.ellipse(cx, cy + h * 0.08, w * 0.16, h * 0.16, 0, 0, Math.PI * 2);
+    outlinedShape(ctx, "#8D5A34", mound, 1.6 * (w / 112));
+    ctx.fillStyle = "#4E2F17";
+    for (const p of scatterPoints(seed * 9 + 1, 3, w * 0.28, h * 0.24, 1)) {
+      ctx.beginPath();
+      ctx.arc(cx + p.x, cy + h * 0.08 + p.y, 1.6 * (w / 112), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (phase === 1) {
+    const pts = scatterPoints(seed * 9 + 2, 2, w * 0.4, h * 0.3, 1);
+    for (const p of pts) chibiSeedling(ctx, cx + p.x, cy + h * 0.1 + p.y, w * 0.34, rng);
+  } else if (phase === 2) {
+    const pts = scatterPoints(seed * 9 + 3, 3, w * 0.5, h * 0.35, 1);
+    for (const p of pts) chibiCarrot(ctx, cx + p.x, cy + h * 0.05 + p.y, w * 0.3, rng);
+  } else {
+    const pts = [
+      { x: -w * 0.18, y: h * 0.02 },
+      { x: w * 0.02, y: -h * 0.06 },
+      { x: w * 0.2, y: h * 0.05 }
+    ];
+    for (const p of pts) chibiCarrot(ctx, cx + p.x, cy + p.y, w * 0.36, rng);
+  }
+}
+
+// ============================================================
+// C — Flat paper-cutout
+// ============================================================
+function flatPoly(ctx, fill, pts) {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function flatCarrot(ctx, x, y, s) {
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.15)";
+  ctx.beginPath();
+  ctx.ellipse(x + 2, y + 0.7 * s, 0.26 * s, 0.08 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // root
+  flatPoly(ctx, "#EF8A2E", [
+    [x - 0.16 * s, y - 0.3 * s],
+    [x + 0.16 * s, y - 0.3 * s],
+    [x + 0.03 * s, y + 0.68 * s],
+    [x - 0.03 * s, y + 0.68 * s]
+  ]);
+  // leaves — flat triangle fan
+  flatPoly(ctx, "#5AA653", [[x - 0.15 * s, y - 0.28 * s], [x - 0.02 * s, y - 0.85 * s], [x + 0.06 * s, y - 0.32 * s]]);
+  flatPoly(ctx, "#4C9146", [[x + 0.15 * s, y - 0.28 * s], [x + 0.04 * s, y - 0.9 * s], [x - 0.03 * s, y - 0.3 * s]]);
+  flatPoly(ctx, "#6BBF63", [[x, y - 0.26 * s], [x + 0.02 * s, y - 0.78 * s], [x + 0.11 * s, y - 0.28 * s]]);
+}
+
+function drawCarrotC(ctx, cx, cy, w, h, seed, phase) {
+  drawTileBg(ctx, cx, cy, w, h);
+  if (phase === 0) {
+    flatPoly(ctx, "#8C6239", [
+      [cx - w * 0.14, cy + h * 0.16],
+      [cx + w * 0.14, cy + h * 0.16],
+      [cx + w * 0.08, cy - h * 0.05],
+      [cx - w * 0.08, cy - h * 0.05]
+    ]);
+    ctx.fillStyle = "#4E2F17";
+    for (const p of scatterPoints(seed * 5 + 1, 4, w * 0.24, h * 0.14, 1)) {
+      ctx.beginPath();
+      ctx.arc(cx + p.x, cy + h * 0.05 + p.y, 1.6 * (w / 112), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (phase === 1) {
+    for (const p of scatterPoints(seed * 5 + 2, 4, w * 0.5, h * 0.3, 1)) {
+      flatPoly(ctx, "#5AA653", [
+        [cx + p.x - 3, cy + h * 0.12 + p.y],
+        [cx + p.x + 3, cy + h * 0.12 + p.y],
+        [cx + p.x, cy + h * 0.12 + p.y - h * 0.22]
+      ]);
+    }
+  } else if (phase === 2) {
+    for (const p of scatterPoints(seed * 5 + 3, 3, w * 0.44, h * 0.28, 1)) {
+      flatCarrot(ctx, cx + p.x, cy + h * 0.1 + p.y, w * 0.24);
+    }
+  } else {
+    const diamond = new Path2D();
+    diamond.moveTo(cx, cy - h / 2);
+    diamond.lineTo(cx + w / 2, cy);
+    diamond.lineTo(cx, cy + h / 2);
+    diamond.lineTo(cx - w / 2, cy);
+    diamond.closePath();
+    const grad = ctx.createLinearGradient(cx, cy - h / 2, cx, cy + h / 2);
+    grad.addColorStop(0, "rgba(255,255,255,0.2)");
+    grad.addColorStop(1, "rgba(0,0,0,0.15)");
+    ctx.fillStyle = grad;
+    ctx.fill(diamond);
+    const pts = [{ x: -w * 0.16, y: h * 0.02 }, { x: w * 0.03, y: -h * 0.08 }, { x: w * 0.18, y: h * 0.04 }];
+    for (const p of pts) flatCarrot(ctx, cx + p.x, cy + p.y, w * 0.3);
+  }
+}
+
+// ============================================================
+// D — Pixel art
+// ============================================================
+const PX_PALETTE = {
+  ".": null, "s": "#8C6239", "d": "#4E2F17",
+  "g": "#66BB6A", "G": "#2E7D32", "o": "#F2932E", "O": "#C96A16"
+};
+
+const PX_SEED = [
+  "..........",
+  "..........",
+  "..ssssss..",
+  ".ssssssss.",
+  "ssdssssdss",
+  ".ssssssss.",
+  "..ssssss..",
+  ".........."
+];
+const PX_SPROUT = [
+  "....g.....",
+  "...g.g....",
+  "..sssss...",
+  ".sssssss..",
+  "ssdssssdss",
+  ".sssssss..",
+  "..sssss...",
+  ".........."
+];
+const PX_PLANT = [
+  "..g.G.g...",
+  ".gGgGgGg..",
+  "..GgGgG...",
+  "...sss....",
+  "..sooss...",
+  "..soooS...",
+  "...ooo....",
+  "....o....."
+];
+const PX_MATURE = [
+  "g.G.g.G.g.",
+  "GgGgGgGgGg",
+  ".gGgGgGgG.",
+  "..oo.oo...",
+  ".oOoo.Oo..",
+  "oOOo.oOOo.",
+  ".Oo...oO..",
+  "..o...o..."
+];
+
+function drawPixels(ctx, cx, cy, w, frame, pxSize) {
+  const fw = frame[0].length, fh = frame.length;
+  const startX = cx - (fw * pxSize) / 2;
+  const startY = cy - (fh * pxSize) / 2 + pxSize * 1.2;
+  ctx.imageSmoothingEnabled = false;
+  for (let row = 0; row < fh; row++) {
+    for (let col = 0; col < fw; col++) {
+      const c = PX_PALETTE[frame[row][col]];
+      if (!c) continue;
+      ctx.fillStyle = c;
+      ctx.fillRect(startX + col * pxSize, startY + row * pxSize, pxSize + 0.5, pxSize + 0.5);
+    }
+  }
+}
+
+function drawCarrotD(ctx, cx, cy, w, h, seed, phase) {
+  drawTileBg(ctx, cx, cy, w, h);
+  const frames = [PX_SEED, PX_SPROUT, PX_PLANT, PX_MATURE];
+  drawPixels(ctx, cx, cy, w, frames[phase], w / 14);
+}
+
+// ---------- Render setup ----------
+function buildRow(containerId, drawFn) {
+  const container = document.getElementById(containerId);
+  PHASES.forEach((label, phase) => {
+    const card = document.createElement("div");
+    card.className = "phase-card";
+    const stage = document.createElement("div");
+    stage.className = "stage";
+    const canvas = document.createElement("canvas");
+    canvas.width = 160;
+    canvas.height = 130;
+    stage.appendChild(canvas);
+    const labelEl = document.createElement("div");
+    labelEl.className = "phase-label";
+    labelEl.textContent = label;
+    card.appendChild(stage);
+    card.appendChild(labelEl);
+    container.appendChild(card);
+
+    const ctx = canvas.getContext("2d");
+    const seed = 12345;
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawFn(ctx, canvas.width / 2, canvas.height / 2 + 8, TILE_W, TILE_H, seed, phase);
+    }
+    render();
+    // re-render on theme toggle changes (CSS var driven backgrounds)
+    new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  });
+}
+
+buildRow("rowA", drawCarrotA);
+buildRow("rowB", drawCarrotB);
+buildRow("rowC", drawCarrotC);
+buildRow("rowD", drawCarrotD);
+</script>

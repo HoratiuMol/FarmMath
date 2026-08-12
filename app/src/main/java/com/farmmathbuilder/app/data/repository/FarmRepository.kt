@@ -12,6 +12,7 @@ import com.farmmathbuilder.app.domain.GridMath
 import com.farmmathbuilder.app.domain.GrowthCalculator
 import com.farmmathbuilder.app.domain.GrowthPhase
 import com.farmmathbuilder.app.domain.OccupantType
+import com.farmmathbuilder.app.domain.isCrop
 import com.farmmathbuilder.app.domain.PathType
 import com.farmmathbuilder.app.domain.SlotAvailability
 import com.farmmathbuilder.app.domain.TextSizeOption
@@ -68,10 +69,10 @@ class FarmRepository(
     }
 
     private fun CellEntity.toUiCell(now: Long = System.currentTimeMillis(), config: GridConfig): UiCell {
-        val phase = if (occupantType == OccupantType.WHEAT) {
+        val phase = if (occupantType.isCrop()) {
             GrowthCalculator.computePhase(plantedAtTimestamp, growthDurationMs, now)
         } else GrowthPhase.NONE
-        val progress = if (occupantType == OccupantType.WHEAT) {
+        val progress = if (occupantType.isCrop()) {
             GrowthCalculator.computeProgress(plantedAtTimestamp, growthDurationMs, now)
         } else 0f
         return UiCell(
@@ -177,11 +178,20 @@ class FarmRepository(
         }
     }
 
-    /** Plants wheat into an empty cell, consuming a free or extra slot per the decision table. */
-    suspend fun plantWheat(cellId: Int): Boolean {
+    /** Carrot is a second crop, unlocked once the player has harvested this many
+     * fields total (any crop) — a simple milestone gate reusing the existing
+     * `fieldsCompletedTotal` counter rather than adding new tracking state. */
+    fun isCarrotUnlocked(p: PlayerEntity): Boolean = p.fieldsCompletedTotal >= CARROT_UNLOCK_HARVESTS
+
+    /** Plants a crop (wheat or carrot) into an empty cell, consuming a free or extra
+     * slot per the decision table. Both crops currently share the same growth
+     * duration/reward — see FarmGridCanvas.drawCarrotTile's doc for the visual side. */
+    suspend fun plantCrop(cellId: Int, cropType: OccupantType): Boolean {
+        if (!cropType.isCrop()) return false
         val cell = cellDao.getById(cellId) ?: return false
         if (cell.occupantType != OccupantType.EMPTY) return false
         val p = playerDao.get() ?: return false
+        if (cropType == OccupantType.CARROT && !isCarrotUnlocked(p)) return false
         val availability = slotAvailability(p)
         if (availability == SlotAvailability.NONE_AVAILABLE) return false
 
@@ -189,7 +199,7 @@ class FarmRepository(
 
         cellDao.update(
             cell.copy(
-                occupantType = OccupantType.WHEAT,
+                occupantType = cropType,
                 plantedAtTimestamp = System.currentTimeMillis(),
                 growthDurationMs = GrowthCalculator.NORMAL_GROWTH_DURATION_MS,
                 consumedSlotType = slotType
@@ -211,7 +221,7 @@ class FarmRepository(
      */
     suspend fun cancelGrowth(cellId: Int): Boolean {
         val cell = cellDao.getById(cellId) ?: return false
-        if (cell.occupantType != OccupantType.WHEAT) return false
+        if (!cell.occupantType.isCrop()) return false
         val phase = GrowthCalculator.computePhase(cell.plantedAtTimestamp, cell.growthDurationMs)
         if (phase == GrowthPhase.MATURE || phase == GrowthPhase.NONE) return false
 
@@ -234,10 +244,12 @@ class FarmRepository(
         return true
     }
 
-    /** FR-015: harvest a mature crop for +5 wheat currency (BR-003), cell returns to empty. */
+    /** FR-015: harvest a mature crop for +5 wheat currency (BR-003), cell returns to empty.
+     * Carrot pays the same reward as wheat — the two crops differ in art/unlock timing,
+     * not economy, for now (see the carrot-unlock gate on [plantCrop]). */
     suspend fun harvest(cellId: Int): Boolean {
         val cell = cellDao.getById(cellId) ?: return false
-        if (cell.occupantType != OccupantType.WHEAT) return false
+        if (!cell.occupantType.isCrop()) return false
         val phase = GrowthCalculator.computePhase(cell.plantedAtTimestamp, cell.growthDurationMs)
         if (phase != GrowthPhase.MATURE) return false
 
@@ -264,7 +276,7 @@ class FarmRepository(
     suspend fun harvestAll(): Int {
         val now = System.currentTimeMillis()
         val matureCells = cellDao.getAll().filter {
-            it.occupantType == OccupantType.WHEAT &&
+            it.occupantType.isCrop() &&
                 GrowthCalculator.computePhase(it.plantedAtTimestamp, it.growthDurationMs, now) == GrowthPhase.MATURE
         }
         if (matureCells.isEmpty()) return 0
@@ -379,11 +391,11 @@ class FarmRepository(
         return true
     }
 
-    /** "Move barn" is only offered while no wheat is growing/mature anywhere on the
-     * map — moving it mid-harvest would silently orphan a crop under the new
-     * footprint (its 4 cells are hard-required EMPTY, see [moveBuilding]). */
+    /** "Move barn" is only offered while no crop (wheat or carrot) is growing/mature
+     * anywhere on the map — moving it mid-harvest would silently orphan a crop under
+     * the new footprint (its 4 cells are hard-required EMPTY, see [moveBuilding]). */
     suspend fun canRepositionBuilding(): Boolean =
-        cellDao.getAll().none { it.occupantType == OccupantType.WHEAT }
+        cellDao.getAll().none { it.occupantType.isCrop() }
 
     /** True if a building anchored at (anchorCol, anchorRow) would (a) fit inside the
      * buildable ring without touching the fenced-off border and (b) land only on
@@ -411,7 +423,7 @@ class FarmRepository(
     suspend fun moveBuilding(newAnchorCol: Int, newAnchorRow: Int): Boolean {
         val p = playerDao.get() ?: return false
         val allCells = cellDao.getAll()
-        if (allCells.any { it.occupantType == OccupantType.WHEAT }) return false
+        if (allCells.any { it.occupantType.isCrop() }) return false
         if (!GridMath.isValidBuildingAnchor(newAnchorCol, newAnchorRow, p.gridCols, p.gridRows)) return false
 
         val oldAnchorCol = p.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(p.gridCols)
@@ -449,7 +461,7 @@ class FarmRepository(
      */
     suspend fun reduceGrowthTime(cellId: Int, reductionMs: Long = 60_000L): Boolean {
         val cell = cellDao.getById(cellId) ?: return false
-        if (cell.occupantType != OccupantType.WHEAT) return false
+        if (!cell.occupantType.isCrop()) return false
         val phase = GrowthCalculator.computePhase(cell.plantedAtTimestamp, cell.growthDurationMs)
         if (phase == GrowthPhase.MATURE || phase == GrowthPhase.NONE) return false
 
@@ -489,5 +501,7 @@ class FarmRepository(
 
     companion object {
         const val TEST_MIN_WHEAT = 100
+        /** Founder request: carrot unlocks after this many total harvests (any crop). */
+        const val CARROT_UNLOCK_HARVESTS = 15
     }
 }

@@ -12,6 +12,7 @@ import com.farmmathbuilder.app.domain.GrowthCalculator
 import com.farmmathbuilder.app.domain.GrowthPhase
 import com.farmmathbuilder.app.domain.MathExerciseGenerator
 import com.farmmathbuilder.app.domain.OccupantType
+import com.farmmathbuilder.app.domain.isCrop
 import com.farmmathbuilder.app.domain.PathType
 import com.farmmathbuilder.app.domain.SlotAvailability
 import com.farmmathbuilder.app.domain.TextSizeOption
@@ -61,10 +62,10 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                     )
                 } ?: GridConfig.BASE
                 val uiCells = cells.map { cell ->
-                    val phase = if (cell.occupantType == OccupantType.WHEAT) {
+                    val phase = if (cell.occupantType.isCrop()) {
                         GrowthCalculator.computePhase(cell.plantedAtTimestamp, cell.growthDurationMs, now.takeIf { it > 0 } ?: System.currentTimeMillis())
                     } else GrowthPhase.NONE
-                    val progress = if (cell.occupantType == OccupantType.WHEAT) {
+                    val progress = if (cell.occupantType.isCrop()) {
                         GrowthCalculator.computeProgress(cell.plantedAtTimestamp, cell.growthDurationMs, now.takeIf { it > 0 } ?: System.currentTimeMillis())
                     } else 0f
                     UiCell(
@@ -114,7 +115,7 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(selectedCellId = null)
     }
 
-    fun buildFreeOrExtra(cellId: Int) {
+    fun buildFreeOrExtra(cellId: Int, cropType: OccupantType) {
         viewModelScope.launch {
             val player = repository.currentPlayer() ?: return@launch
             val availability = repository.slotAvailability(player)
@@ -122,10 +123,14 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                 _uiState.value = _uiState.value.copy(noSlotsSnackbar = true, selectedCellId = null)
                 return@launch
             }
-            repository.plantWheat(cellId)
+            repository.plantCrop(cellId, cropType)
             _uiState.value = _uiState.value.copy(selectedCellId = null)
         }
     }
+
+    /** Carrot unlocks after [FarmRepository.CARROT_UNLOCK_HARVESTS] total harvests —
+     * exposed for the plant-crop dialog's lock hint/messaging. */
+    fun isCarrotUnlocked(): Boolean = _uiState.value.player?.let { repository.isCarrotUnlocked(it) } ?: false
 
     fun cancelGrowth(cellId: Int) {
         viewModelScope.launch {
@@ -207,14 +212,15 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
 
     // ---------- Move barn ----------
 
-    /** Whether "move barn" can currently be offered at all — no wheat growing/mature
-     * anywhere on the map (see FarmRepository.canRepositionBuilding's doc). */
-    fun hasWheatOnMap(): Boolean = _uiState.value.cells.any { it.occupantType == OccupantType.WHEAT }
+    /** Whether "move barn" can currently be offered at all — no crop (wheat or
+     * carrot) growing/mature anywhere on the map (see
+     * FarmRepository.canRepositionBuilding's doc). */
+    fun hasGrowingCropOnMap(): Boolean = _uiState.value.cells.any { it.occupantType.isCrop() }
 
     fun startRepositioningBuilding() {
-        if (hasWheatOnMap()) {
+        if (hasGrowingCropOnMap()) {
             _uiState.value = _uiState.value.copy(
-                moveBuildingSnackbar = "Harvest or cancel all wheat first to move the barn"
+                moveBuildingSnackbar = "Harvest or cancel all crops first to move the barn"
             )
             return
         }
