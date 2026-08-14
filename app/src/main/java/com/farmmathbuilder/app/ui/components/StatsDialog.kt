@@ -16,6 +16,7 @@ fun StatsDialog(player: PlayerEntity?, onDismiss: () -> Unit) {
         text = {
             Column {
                 Text("Wheat currency: ${player?.wheatCurrency ?: 0}")
+                Text("🥕 Cow feed: ${player?.carrotInventory ?: 0}")
                 Text("Fields harvested: ${player?.fieldsCompletedTotal ?: 0}")
                 Text("Exercises solved today: ${player?.exercisesSolvedToday ?: 0}")
                 Text("Current streak: ${player?.currentStreak ?: 0}")

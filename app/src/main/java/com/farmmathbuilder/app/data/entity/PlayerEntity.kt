@@ -27,5 +27,16 @@ data class PlayerEntity(
      * center (see GridMath.defaultBuildingAnchorCol/Row). Set once the player uses
      * "move barn" (FarmRepository.moveBuilding). */
     val buildingAnchorCol: Int? = null,
-    val buildingAnchorRow: Int? = null
+    val buildingAnchorRow: Int? = null,
+    /** Wheat-only harvest count — carrot's unlock gate specifically watches this,
+     * not [fieldsCompletedTotal] (which mixes in carrot harvests once unlocked). */
+    val wheatHarvestedTotal: Int = 0,
+    /** Timestamp-based like every other timer in this app (GrowthCalculator,
+     * daily reset) — never a decrementing counter, so it survives app kill.
+     * See [com.farmmathbuilder.app.domain.CowHunger]. */
+    val cowLastFedTimestamp: Long = 0L,
+    /** Harvested-carrot stockpile: carrot's whole purpose (unlike wheat, which
+     * pays wheatCurrency), consumed 1-at-a-time to feed the cow. See
+     * FarmRepository.harvest/feedCow. */
+    val carrotInventory: Int = 0
 )

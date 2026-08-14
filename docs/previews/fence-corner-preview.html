@@ -1,0 +1,369 @@
+<title>Fence Corner — Design Options</title>
+<style>
+  :root {
+    --bg: #f3eee1; --panel: #fbf8f0; --ink: #2c2418; --muted: #7a6f5c;
+    --accent: #5c8a3a; --line: #e4dac4;
+    --ground-a: #9CCC65; --ground-b: #8fc158;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1812; --panel: #24201a; --ink: #f1ead9; --muted: #a79a82;
+      --accent: #7fb65a; --line: #362f23;
+      --ground-a: #4f7a36; --ground-b: #466c30;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1812; --panel: #24201a; --ink: #f1ead9; --muted: #a79a82;
+    --accent: #7fb65a; --line: #362f23;
+    --ground-a: #4f7a36; --ground-b: #466c30;
+  }
+  :root[data-theme="light"] {
+    --bg: #f3eee1; --panel: #fbf8f0; --ink: #2c2418; --muted: #7a6f5c;
+    --accent: #5c8a3a; --line: #e4dac4;
+    --ground-a: #9CCC65; --ground-b: #8fc158;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px 24px 64px; }
+  header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  h1 { font-size: clamp(26px, 4vw, 34px); line-height: 1.1; margin: 0; font-weight: 700; text-wrap: balance; }
+  .subtitle { color: var(--muted); font-size: 14.5px; max-width: 74ch; line-height: 1.55; margin: 0; }
+  .problem {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 24px; font-size: 13.5px; line-height: 1.6; color: var(--muted);
+  }
+  .problem strong { color: var(--ink); }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .card-head h2 { font-size: 15px; margin: 0; font-weight: 700; }
+  .letter {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-size: 12px; font-weight: 700; margin-right: 8px;
+  }
+  .desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0; }
+  .stage { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+  canvas { display: block; width: 100%; height: auto; }
+  .note {
+    font-size: 12.5px; color: var(--muted); line-height: 1.6;
+    border-top: 1px solid var(--line); padding-top: 14px; margin-top: 28px;
+  }
+  footer { margin-top: 20px; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Farm Math Builder &middot; Asset Preview</span>
+    <h1>Fence corner, design options</h1>
+    <p class="subtitle">
+      Four directions for fixing the boundary fence's corner joints — where the
+      current asset's straight one-tile picket run, rotated 90&deg; between the two
+      edges, doesn't form a clean miter and instead reads as overlapping/
+      disconnected pickets. Each option is shown as a small L-shaped corner
+      section, isometric, on the game's own ground green, at the same tile scale.
+    </p>
+  </header>
+
+  <div class="problem">
+    <strong>Why the current fence.fbx-based mesh can't self-miter:</strong> each
+    module is a straight run of pickets built for continuing straight, not
+    turning a corner — rotating it 90&deg; for the perpendicular edge gives two
+    independent, differently-angled meshes that happen to sit near the same
+    post but were never designed to butt against each other cleanly. A code-only
+    fix (drawing both orientations at the shared corner post) has already been
+    tried as the lowest-risk attempt; these four are the fallback if that still
+    doesn't read cleanly on-device.
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-head"><h2><span class="letter">A</span>Flat 2D picket wall</h2></div>
+      <p class="desc">Drops the 3D mesh entirely — pickets and rail drawn as flat Canvas shapes (same "programmatic 2D" grammar as the wheat/carrot tiles), with one dedicated corner post. Corners trivially work: a post is just a post, wall segments run up to it from either side. Lowest visual detail of the four, but zero corner ambiguity and cheapest to compute.</p>
+      <div class="stage"><canvas id="cA" width="340" height="220"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2><span class="letter">B</span>Continuous rope + pickets</h2></div>
+      <p class="desc">The whole boundary is one continuous path (not per-cell modules) with picket ticks stamped along its length at even spacing. Corners are automatically seamless because there's only one line being drawn, not two separate rotated pieces meeting — the direction just changes at the path's own corner vertex.</p>
+      <div class="stage"><canvas id="cB" width="340" height="220"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2><span class="letter">C</span>Solid hedge/wall ribbon</h2></div>
+      <p class="desc">The boundary becomes one filled ring polygon (inner edge + outer edge, offset by wall thickness) instead of individual fence posts — a low stone wall or hedge look. Corners are perfect by construction (they're just the polygon's own vertices), the most robust option here, at the cost of the picket-fence character.</p>
+      <div class="stage"><canvas id="cC" width="340" height="220"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2><span class="letter">D</span>3D low-poly, dedicated corner post</h2></div>
+      <p class="desc">Keeps today's exact look (same flat-shaded low-poly style as the barn) but adds a genuine hand-built corner module — 4 pickets fanned around a shared post — used only at the 4 map corners, straight runs unchanged elsewhere. Most faithful to the current asset, but the most implementation work (a new procedural corner mesh, not sourced from fence.fbx, since that file has no corner geometry at all).</p>
+      <div class="stage"><canvas id="cD" width="340" height="220"></canvas></div>
+    </div>
+  </div>
+
+  <p class="note">
+    All four render the ground/tile scale identically to the shipped game (56&times;30px tile,
+    scaled 2&times; here for legibility) so proportions compare accurately. These are static
+    corner-only mockups — not full-boundary previews — since the corner joint is the
+    specific thing being evaluated.
+  </p>
+  <footer>Farm Math Builder — internal asset preview, not shipped UI</footer>
+</main>
+
+<script>
+"use strict";
+
+const TILE_W = 112, TILE_H = 60;
+
+function isoXY(gx, gy) {
+  return { x: (gx - gy) * TILE_W / 2, y: (gx + gy) * TILE_H / 2 };
+}
+
+function groundColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return [cs.getPropertyValue("--ground-a").trim(), cs.getPropertyValue("--ground-b").trim()];
+}
+
+function drawGround(ctx, cx, cy, cols, rows) {
+  const [ga, gb] = groundColors();
+  for (let gy = 0; gy < rows; gy++) {
+    for (let gx = 0; gx < cols; gx++) {
+      const p = isoXY(gx, gy);
+      const x = cx + p.x, y = cy + p.y;
+      ctx.beginPath();
+      ctx.moveTo(x, y - TILE_H / 2);
+      ctx.lineTo(x + TILE_W / 2, y);
+      ctx.lineTo(x, y + TILE_H / 2);
+      ctx.lineTo(x - TILE_W / 2, y);
+      ctx.closePath();
+      ctx.fillStyle = (gx + gy) % 2 === 0 ? ga : gb;
+      ctx.fill();
+    }
+  }
+}
+
+// The corner boundary path in grid units: runs along the top edge (row=-0.5),
+// turns at the corner (col=-0.5,row=-0.5), then down the left edge (col=-0.5).
+// Matches the shipped game's "anchor half a cell outside the border ring"
+// convention (see FarmGridCanvas's fenceCol/fenceRow shift).
+const BOUNDARY_PTS_GRID = [
+  { x: 2.3, y: -0.5 },
+  { x: 0.3, y: -0.5 },
+  { x: -0.5, y: -0.5 },
+  { x: -0.5, y: 0.3 },
+  { x: -0.5, y: 2.3 }
+];
+
+function toScreen(cx, cy, gp) {
+  const p = isoXY(gp.x, gp.y);
+  return { x: cx + p.x, y: cy + p.y };
+}
+
+// ---------- A: Flat 2D picket wall ----------
+function drawPostA(ctx, x, y, h, w) {
+  ctx.fillStyle = "#6d5638";
+  ctx.fillRect(x - w / 2, y - h, w, h);
+  ctx.fillStyle = "#5a4529";
+  ctx.beginPath();
+  ctx.moveTo(x - w / 2, y - h);
+  ctx.lineTo(x, y - h - w * 0.6);
+  ctx.lineTo(x + w / 2, y - h);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPicketA(ctx, x, y) {
+  drawPostA(ctx, x, y, 26, 7);
+}
+
+function drawFenceA(ctx, cx, cy) {
+  const pts = BOUNDARY_PTS_GRID.map((g) => toScreen(cx, cy, g));
+  // rail
+  ctx.strokeStyle = "#8a6a42";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y - 12);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y - 12);
+  ctx.stroke();
+  // pickets every ~0.5 grid unit along each segment
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const steps = 4;
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      drawPicketA(ctx, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+    }
+  }
+  // dedicated corner post, drawn once, on top — this is the whole point: a
+  // shared piece both walls run into, not two rotated meshes meeting.
+  drawPostA(ctx, pts[2].x, pts[2].y, 32, 10);
+}
+
+// ---------- B: Continuous rope + pickets ----------
+function drawFenceB(ctx, cx, cy) {
+  const pts = BOUNDARY_PTS_GRID.map((g) => toScreen(cx, cy, g));
+  // base rope/rail — one continuous stroked path
+  ctx.strokeStyle = "#7a5a36";
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+
+  // sample evenly-spaced picket ticks along the path's own arc length
+  const segLens = [];
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+    segLens.push(d);
+    total += d;
+  }
+  const spacing = 16;
+  let dist = 0;
+  ctx.strokeStyle = "#4a3520";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  for (let d = 0; d < total; d += spacing) {
+    let acc = 0, segIdx = 0;
+    while (segIdx < segLens.length && acc + segLens[segIdx] < d) {
+      acc += segLens[segIdx];
+      segIdx++;
+    }
+    const a = pts[segIdx], b = pts[segIdx + 1];
+    const segT = segLens[segIdx] === 0 ? 0 : (d - acc) / segLens[segIdx];
+    const px = a.x + (b.x - a.x) * segT;
+    const py = a.y + (b.y - a.y) * segT;
+    // perpendicular direction for the picket tick
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px + nx * 20, py + ny * 20 - 14);
+    ctx.stroke();
+  }
+}
+
+// ---------- C: Solid hedge/wall ribbon ----------
+function offsetPolyline(pts, thickness) {
+  // simple outward offset (screen-space normal per segment, averaged at joints) —
+  // good enough for a preview, not a general-purpose miter-offset algorithm.
+  const outer = [], inner = [];
+  for (let i = 0; i < pts.length; i++) {
+    const prev = pts[Math.max(0, i - 1)];
+    const next = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = next.x - prev.x, dy = next.y - prev.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    outer.push({ x: pts[i].x + nx * thickness, y: pts[i].y + ny * thickness - 10 });
+    inner.push({ x: pts[i].x - nx * thickness * 0.4, y: pts[i].y - ny * thickness * 0.4 - 10 });
+  }
+  return { outer, inner };
+}
+
+function drawFenceC(ctx, cx, cy) {
+  const pts = BOUNDARY_PTS_GRID.map((g) => toScreen(cx, cy, g));
+  const { outer, inner } = offsetPolyline(pts, 14);
+  ctx.fillStyle = "#7f9e5c";
+  ctx.beginPath();
+  ctx.moveTo(outer[0].x, outer[0].y);
+  for (let i = 1; i < outer.length; i++) ctx.lineTo(outer[i].x, outer[i].y);
+  for (let i = inner.length - 1; i >= 0; i--) ctx.lineTo(inner[i].x, inner[i].y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#5c7440";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // top highlight strip for a little dimensionality
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(outer[0].x, outer[0].y);
+  for (let i = 1; i < outer.length; i++) ctx.lineTo(outer[i].x, outer[i].y);
+  ctx.stroke();
+}
+
+// ---------- D: 3D low-poly, dedicated corner post ----------
+function shade(hex, factor) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = Math.max(0, Math.min(255, Math.round(r * factor)));
+  g = Math.max(0, Math.min(255, Math.round(g * factor)));
+  b = Math.max(0, Math.min(255, Math.round(b * factor)));
+  return `rgb(${r},${g},${b})`;
+}
+
+function drawPicketD(ctx, x, y, angleDeg, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate((angleDeg * Math.PI) / 180);
+  ctx.fillStyle = shade(color, 0.85);
+  ctx.beginPath();
+  ctx.moveTo(-4, 0);
+  ctx.lineTo(4, 0);
+  ctx.lineTo(4, -26);
+  ctx.lineTo(0, -34);
+  ctx.lineTo(-4, -26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = shade(color, 1.05);
+  ctx.beginPath();
+  ctx.moveTo(-4, -26);
+  ctx.lineTo(4, -26);
+  ctx.lineTo(0, -34);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFenceD(ctx, cx, cy) {
+  const pts = BOUNDARY_PTS_GRID.map((g) => toScreen(cx, cy, g));
+  const color = "#c9a676";
+  // straight runs: pickets aligned to each segment's own direction
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI + 90;
+    const steps = 4;
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      drawPicketD(ctx, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, angle, color);
+    }
+  }
+  // dedicated corner module: a fan of pickets bridging both directions at
+  // the shared post, instead of one straight-run module rotated in place.
+  const corner = pts[2];
+  const fanAngles = [70, 100, 135, 170];
+  for (const a of fanAngles) drawPicketD(ctx, corner.x, corner.y, a, color);
+}
+
+// ---------- Render setup ----------
+function setupStage(canvasId, drawFn) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawGround(ctx, canvas.width * 0.62, canvas.height * 0.32, 4, 4);
+    drawFn(ctx, canvas.width * 0.62, canvas.height * 0.32);
+  }
+  render();
+  new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+}
+
+setupStage("cA", drawFenceA);
+setupStage("cB", drawFenceB);
+setupStage("cC", drawFenceC);
+setupStage("cD", drawFenceD);
+</script>

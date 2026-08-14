@@ -22,6 +22,7 @@ import com.farmmathbuilder.app.data.repository.FarmRepository
 import com.farmmathbuilder.app.domain.isCrop
 import com.farmmathbuilder.app.domain.SlotAvailability
 import com.farmmathbuilder.app.ui.components.CellActionDialog
+import com.farmmathbuilder.app.ui.components.ChallengeDialog
 import com.farmmathbuilder.app.ui.components.ConfettiOverlay
 import com.farmmathbuilder.app.ui.components.ExpandMapButton
 import com.farmmathbuilder.app.ui.components.FabColumn
@@ -67,6 +68,12 @@ fun FarmScreen(
             viewModel.consumeMoveBuildingSnackbar()
         }
     }
+    LaunchedEffect(uiState.cowFeedSnackbar) {
+        uiState.cowFeedSnackbar?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeCowFeedSnackbar()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -79,7 +86,9 @@ fun FarmScreen(
                 onCellTapped = { cellId -> viewModel.onCellTapped(cellId) },
                 modifier = Modifier.fillMaxSize(),
                 isRepositioningBuilding = uiState.isRepositioningBuilding,
-                onRepositionTarget = { col, row -> viewModel.onRepositionTarget(col, row) }
+                onRepositionTarget = { col, row -> viewModel.onRepositionTarget(col, row) },
+                isCowHungry = uiState.isCowHungry,
+                onCowTapped = { viewModel.feedCow() }
             )
 
             val matureCount = uiState.cells.count { it.isMature }
@@ -99,6 +108,7 @@ fun FarmScreen(
             }
 
             FabColumn(
+                onChallengeClick = { viewModel.startChallenge() },
                 onMathClick = { viewModel.openExercise() },
                 onStatsClick = { showStats = true },
                 onSettingsClick = onOpenSettings,
@@ -147,7 +157,7 @@ fun FarmScreen(
                         cell = cell,
                         slotAvailability = availability,
                         carrotUnlocked = viewModel.isCarrotUnlocked(),
-                        carrotUnlockHarvestsRemaining = (FarmRepository.CARROT_UNLOCK_HARVESTS - (uiState.player?.fieldsCompletedTotal ?: 0)).coerceAtLeast(0),
+                        carrotUnlockHarvestsRemaining = (FarmRepository.CARROT_UNLOCK_WHEAT_HARVESTS - (uiState.player?.wheatHarvestedTotal ?: 0)).coerceAtLeast(0),
                         onDismiss = { viewModel.dismissCellPopup() },
                         onPlantCrop = { cropType -> viewModel.buildFreeOrExtra(cellId, cropType) },
                         onSolveExercise = {
@@ -168,6 +178,20 @@ fun FarmScreen(
                     onAnswer = { viewModel.submitAnswer(it) },
                     onNext = { viewModel.nextExercise() },
                     onClose = { viewModel.closeExercise() }
+                )
+            }
+
+            uiState.activeChallengeExercise?.let { exercise ->
+                ChallengeDialog(
+                    exercise = exercise,
+                    correctCount = uiState.challengeCorrectCount,
+                    challengeLength = FarmRepository.EXERCISE_STREAK_CHALLENGE_LENGTH,
+                    lastAnswerCorrect = uiState.challengeLastAnswerCorrect,
+                    completedBonusFields = uiState.challengeCompletedBonusFields,
+                    failed = uiState.challengeFailed,
+                    onAnswer = { viewModel.submitChallengeAnswer(it) },
+                    onNextQuestion = { viewModel.nextChallengeQuestion() },
+                    onClose = { viewModel.closeChallenge() }
                 )
             }
 

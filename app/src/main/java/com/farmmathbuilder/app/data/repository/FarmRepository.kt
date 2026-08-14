@@ -20,6 +20,7 @@ import com.farmmathbuilder.app.domain.UiCell
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlin.random.Random
 import java.util.Calendar
 
 /**
@@ -119,7 +120,13 @@ class FarmRepository(
         val existing = playerDao.get()
         if (existing == null) {
             playerDao.insert(
-                PlayerEntity(lastDailyResetTimestamp = System.currentTimeMillis(), wheatCurrency = TEST_MIN_WHEAT)
+                PlayerEntity(
+                    lastDailyResetTimestamp = System.currentTimeMillis(),
+                    wheatCurrency = TEST_MIN_WHEAT,
+                    // Cow starts "just fed" so a new save doesn't open with the
+                    // hunger icon already showing — see CowHunger.
+                    cowLastFedTimestamp = System.currentTimeMillis()
+                )
             )
         } else if (existing.wheatCurrency < TEST_MIN_WHEAT) {
             // Top up saves from before the test-wheat floor existed (or any save
@@ -178,10 +185,17 @@ class FarmRepository(
         }
     }
 
-    /** Carrot is a second crop, unlocked once the player has harvested this many
-     * fields total (any crop) — a simple milestone gate reusing the existing
-     * `fieldsCompletedTotal` counter rather than adding new tracking state. */
-    fun isCarrotUnlocked(p: PlayerEntity): Boolean = p.fieldsCompletedTotal >= CARROT_UNLOCK_HARVESTS
+    /** Carrot is a second crop, meant to unlock once the player has harvested
+     * [CARROT_UNLOCK_WHEAT_HARVESTS] *wheat* fields specifically (not total crop
+     * harvests — [PlayerEntity.wheatHarvestedTotal] only increments for wheat, see
+     * [harvest]/[harvestAll]).
+     *
+     * Testing aid: unlocked from the start regardless of harvests, same "always
+     * testable" convention as [TEST_MIN_WHEAT]. Restore the real gate (commented
+     * below) once carrot's unlock pacing doesn't need to be freely testable.
+     */
+    fun isCarrotUnlocked(p: PlayerEntity): Boolean = true
+    // Real gate: p.wheatHarvestedTotal >= CARROT_UNLOCK_WHEAT_HARVESTS
 
     /** Plants a crop (wheat or carrot) into an empty cell, consuming a free or extra
      * slot per the decision table. Both crops currently share the same growth
@@ -244,9 +258,11 @@ class FarmRepository(
         return true
     }
 
-    /** FR-015: harvest a mature crop for +5 wheat currency (BR-003), cell returns to empty.
-     * Carrot pays the same reward as wheat — the two crops differ in art/unlock timing,
-     * not economy, for now (see the carrot-unlock gate on [plantCrop]). */
+    /** FR-015: harvest a mature crop, cell returns to empty. Wheat pays +5 wheat
+     * currency (BR-003); carrot pays no currency at all — its entire purpose is
+     * becoming cow feed, so it instead adds +1 to [PlayerEntity.carrotInventory]
+     * (see [feedCow]). `fieldsCompletedTotal`/`pathTypesUnlocked` progress the
+     * same for either crop — those track general farming progress, not currency. */
     suspend fun harvest(cellId: Int): Boolean {
         val cell = cellDao.getById(cellId) ?: return false
         if (!cell.occupantType.isCrop()) return false
@@ -254,10 +270,13 @@ class FarmRepository(
         if (phase != GrowthPhase.MATURE) return false
 
         val p = playerDao.get() ?: return false
+        val isWheat = cell.occupantType == OccupantType.WHEAT
         updatePlayer(
             p.copy(
-                wheatCurrency = p.wheatCurrency + 5,
+                wheatCurrency = if (isWheat) p.wheatCurrency + 5 else p.wheatCurrency,
+                carrotInventory = if (isWheat) p.carrotInventory else p.carrotInventory + 1,
                 fieldsCompletedTotal = p.fieldsCompletedTotal + 1,
+                wheatHarvestedTotal = if (isWheat) p.wheatHarvestedTotal + 1 else p.wheatHarvestedTotal,
                 pathTypesUnlocked = (p.pathTypesUnlocked + 1).coerceAtMost(PathType.entries.size)
             )
         )
@@ -282,10 +301,14 @@ class FarmRepository(
         if (matureCells.isEmpty()) return 0
 
         val p = playerDao.get() ?: return 0
+        val wheatHarvestedCount = matureCells.count { it.occupantType == OccupantType.WHEAT }
+        val carrotHarvestedCount = matureCells.size - wheatHarvestedCount
         updatePlayer(
             p.copy(
-                wheatCurrency = p.wheatCurrency + 5 * matureCells.size,
+                wheatCurrency = p.wheatCurrency + 5 * wheatHarvestedCount,
+                carrotInventory = p.carrotInventory + carrotHarvestedCount,
                 fieldsCompletedTotal = p.fieldsCompletedTotal + matureCells.size,
+                wheatHarvestedTotal = p.wheatHarvestedTotal + wheatHarvestedCount,
                 pathTypesUnlocked = (p.pathTypesUnlocked + matureCells.size).coerceAtMost(PathType.entries.size)
             )
         )
@@ -469,6 +492,10 @@ class FarmRepository(
         return true
     }
 
+    /** Casual single-exercise-for-a-field flow (the yellow calculator FAB):
+     * +1 extra field per correct answer, no bonus packs — those now live
+     * entirely in the separate 10-exercise Challenge flow below, per founder
+     * request that the two not be entangled into one continuous dialog. */
     suspend fun recordExerciseResult(correct: Boolean) {
         val p = playerDao.get() ?: return
         updatePlayer(
@@ -479,12 +506,45 @@ class FarmRepository(
                     currentStreak = p.currentStreak + 1
                 )
             } else {
-                p.copy(
-                    exercisesSolvedToday = p.exercisesSolvedToday,
-                    currentStreak = 0
-                )
+                p.copy(currentStreak = 0)
             }
         )
+    }
+
+    /**
+     * Founder request: a dedicated "solve 10 in a row" challenge, entered via
+     * its own button (not folded into the casual exercise flow above). Records
+     * one answer of an in-progress challenge attempt (tracked client-side in
+     * FarmViewModel, not persisted — a challenge is a one-sitting activity, same
+     * as the rest of the exercise UI state). Unlike [recordExerciseResult], a
+     * correct answer here does **not** grant the usual +1 field — a challenge's
+     * only reward is the lump [grantChallengeBonus] pack on full completion.
+     * Still updates the shared `exercisesSolvedToday`/`currentStreak` stats so
+     * the Stats dialog and any future streak UI stay consistent regardless of
+     * which flow the player used.
+     */
+    suspend fun recordChallengeAnswer(correct: Boolean) {
+        val p = playerDao.get() ?: return
+        updatePlayer(
+            if (correct) {
+                p.copy(exercisesSolvedToday = p.exercisesSolvedToday + 1, currentStreak = p.currentStreak + 1)
+            } else {
+                p.copy(currentStreak = 0)
+            }
+        )
+    }
+
+    /** Grants a completed challenge attempt's reward: a random
+     * [CHALLENGE_BONUS_MIN]-[CHALLENGE_BONUS_MAX] field bonus **pack** in one
+     * go, landing in the same `extraFieldsEarnedToday` pool the casual
+     * +1-per-answer reward uses — fields can unlock in bulk this way, not only
+     * individually. Called once by FarmViewModel when a challenge attempt
+     * reaches its full length. */
+    suspend fun grantChallengeBonus(): Int {
+        val p = playerDao.get() ?: return 0
+        val bonus = Random.nextInt(CHALLENGE_BONUS_MIN, CHALLENGE_BONUS_MAX + 1)
+        updatePlayer(p.copy(extraFieldsEarnedToday = p.extraFieldsEarnedToday + bonus))
+        return bonus
     }
 
     suspend fun setAgeBand(ageBand: AgeBand) {
@@ -497,11 +557,33 @@ class FarmRepository(
         settingsDao.update(mutator(s))
     }
 
+    /** Feeding the wandering cow costs 1 harvested carrot (her entire purpose,
+     * per founder request) — consumes it from [PlayerEntity.carrotInventory] and
+     * resets her fed timestamp. Only meaningful while she's hungry (enforced by
+     * the tap hit-test in FarmGridCanvas, not re-checked here since there's no
+     * penalty for a redundant feed), but always requires the carrot regardless.
+     * Returns false (no state change) when the player has none to feed her. */
+    suspend fun feedCow(): Boolean {
+        val p = playerDao.get() ?: return false
+        if (p.carrotInventory <= 0) return false
+        updatePlayer(
+            p.copy(
+                cowLastFedTimestamp = System.currentTimeMillis(),
+                carrotInventory = p.carrotInventory - 1
+            )
+        )
+        return true
+    }
+
     suspend fun currentPlayer(): PlayerEntity? = player.first()
 
     companion object {
         const val TEST_MIN_WHEAT = 100
-        /** Founder request: carrot unlocks after this many total harvests (any crop). */
-        const val CARROT_UNLOCK_HARVESTS = 15
+        /** Founder request: carrot unlocks after this many wheat harvests specifically. */
+        const val CARROT_UNLOCK_WHEAT_HARVESTS = 50
+        /** Founder request: the dedicated Challenge is this many consecutive correct answers. */
+        const val EXERCISE_STREAK_CHALLENGE_LENGTH = 10
+        const val CHALLENGE_BONUS_MIN = 5
+        const val CHALLENGE_BONUS_MAX = 10
     }
 }

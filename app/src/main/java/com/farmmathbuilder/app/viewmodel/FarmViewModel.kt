@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.farmmathbuilder.app.data.entity.SettingsEntity
 import com.farmmathbuilder.app.data.repository.FarmRepository
 import com.farmmathbuilder.app.domain.AgeBand
+import com.farmmathbuilder.app.domain.CowHunger
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.GridMath
 import com.farmmathbuilder.app.domain.GrowthCalculator
@@ -83,15 +84,20 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                         isWithinBuildableRadius = GridMath.isWithinBuildableRadius(cell.col, cell.row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow)
                     )
                 }
-                Triple(uiCells, player, settings) to gridConfig
-            }.collect { (data, gridConfig) ->
+                val cowHungry = player?.let {
+                    CowHunger.isHungry(it.cowLastFedTimestamp, now.takeIf { n -> n > 0 } ?: System.currentTimeMillis())
+                } ?: false
+                Triple(uiCells, player, settings) to (gridConfig to cowHungry)
+            }.collect { (data, extra) ->
                 val (uiCells, player, settings) = data
+                val (gridConfig, cowHungry) = extra
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     cells = uiCells,
                     player = player,
                     settings = settings,
-                    gridConfig = gridConfig
+                    gridConfig = gridConfig,
+                    isCowHungry = cowHungry
                 )
             }
         }
@@ -247,7 +253,28 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(moveBuildingSnackbar = null)
     }
 
-    // ---------- Math exercise ----------
+    // ---------- Cow ----------
+
+    /** Tapping the cow while she's hungry (FarmGridCanvas only fires this when
+     * [FarmUiState.isCowHungry] is true) feeds her 1 harvested carrot and resets
+     * her hunger timer. If the player has none, nothing changes and a hint
+     * snackbar explains why (harvest a carrot first). */
+    fun feedCow() {
+        viewModelScope.launch {
+            val fed = repository.feedCow()
+            if (!fed) {
+                _uiState.value = _uiState.value.copy(
+                    cowFeedSnackbar = "🥕 You need a carrot to feed her — harvest one first!"
+                )
+            }
+        }
+    }
+
+    fun consumeCowFeedSnackbar() {
+        _uiState.value = _uiState.value.copy(cowFeedSnackbar = null)
+    }
+
+    // ---------- Math exercise (casual single-exercise-for-a-field flow) ----------
 
     fun openExercise() {
         val ageBand = _uiState.value.player?.ageBand ?: AgeBand.AGE_6_9
@@ -301,6 +328,63 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
             activeExercise = null,
             exercisePurposeCellId = null,
             lastAnswerCorrect = null
+        )
+    }
+
+    // ---------- Dedicated "10 in a row" Challenge (separate from the flow above) ----------
+
+    /** Starts a fresh Challenge attempt: [FarmUiState.challengeCorrectCount] resets
+     * to 0 and the first question loads. Entered only via its own FAB, never as a
+     * continuation of a casual exercise. */
+    fun startChallenge() {
+        val ageBand = _uiState.value.player?.ageBand ?: AgeBand.AGE_6_9
+        _uiState.value = _uiState.value.copy(
+            activeChallengeExercise = MathExerciseGenerator.generate(ageBand),
+            challengeCorrectCount = 0,
+            challengeLastAnswerCorrect = null,
+            challengeCompletedBonusFields = null,
+            challengeFailed = false
+        )
+    }
+
+    fun submitChallengeAnswer(answer: Int) {
+        val exercise = _uiState.value.activeChallengeExercise ?: return
+        val correct = answer == exercise.correctAnswer
+        viewModelScope.launch {
+            repository.recordChallengeAnswer(correct)
+            if (!correct) {
+                _uiState.value = _uiState.value.copy(challengeLastAnswerCorrect = false, challengeFailed = true)
+                return@launch
+            }
+            val newCount = _uiState.value.challengeCorrectCount + 1
+            if (newCount >= FarmRepository.EXERCISE_STREAK_CHALLENGE_LENGTH) {
+                val bonus = repository.grantChallengeBonus()
+                _uiState.value = _uiState.value.copy(
+                    challengeCorrectCount = newCount,
+                    challengeLastAnswerCorrect = true,
+                    challengeCompletedBonusFields = bonus
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(challengeCorrectCount = newCount, challengeLastAnswerCorrect = true)
+            }
+        }
+    }
+
+    fun nextChallengeQuestion() {
+        val ageBand = _uiState.value.player?.ageBand ?: AgeBand.AGE_6_9
+        _uiState.value = _uiState.value.copy(
+            activeChallengeExercise = MathExerciseGenerator.generate(ageBand),
+            challengeLastAnswerCorrect = null
+        )
+    }
+
+    fun closeChallenge() {
+        _uiState.value = _uiState.value.copy(
+            activeChallengeExercise = null,
+            challengeCorrectCount = 0,
+            challengeLastAnswerCorrect = null,
+            challengeCompletedBonusFields = null,
+            challengeFailed = false
         )
     }
 

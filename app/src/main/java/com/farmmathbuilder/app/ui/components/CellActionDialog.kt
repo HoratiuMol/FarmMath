@@ -50,10 +50,10 @@ fun CellActionDialog(
             Column {
                 when {
                     cell.isEmpty && slotAvailability != SlotAvailability.NONE_AVAILABLE -> {
-                        Text("Choose a crop for this field. Wheat and carrot both take about 10 minutes to grow.")
+                        Text("Choose a crop for this field (about 10 minutes to grow). Wheat sells for wheat currency; carrot becomes 🥕 feed for the cow.")
                         if (!carrotUnlocked) {
                             Spacer(Modifier.height(4.dp))
-                            Text("Carrot unlocks in $carrotUnlockHarvestsRemaining more harvest${if (carrotUnlockHarvestsRemaining == 1) "" else "s"}.")
+                            Text("Carrot unlocks in $carrotUnlockHarvestsRemaining more wheat harvest${if (carrotUnlockHarvestsRemaining == 1) "" else "s"}.")
                         }
                     }
                     cell.isEmpty -> {
