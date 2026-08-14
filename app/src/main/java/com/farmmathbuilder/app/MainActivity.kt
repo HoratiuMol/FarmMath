@@ -11,7 +11,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import com.farmmathbuilder.app.audio.SoundManager
 import com.farmmathbuilder.app.data.db.AppDatabase
 import com.farmmathbuilder.app.data.repository.FarmRepository
 import com.farmmathbuilder.app.domain.TextSizeOption
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SoundManager.init(applicationContext)
         setContent {
             val uiState by viewModel.uiState.collectAsState()
             val settings = uiState.settings
@@ -42,6 +45,21 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     var showSettings by rememberSaveable { mutableStateOf(false) }
 
+                    // Keep SoundManager's volume/mute in sync with the persisted
+                    // settings, and start the farm's ambient loop once settings have
+                    // resolved from Room (avoids starting at hardcoded defaults then
+                    // jumping to the real value a frame later).
+                    LaunchedEffect(settings?.sfxVolume, settings?.musicVolume, settings?.muted) {
+                        if (settings != null) {
+                            SoundManager.updateSettings(
+                                sfxVolume = settings.sfxVolume,
+                                musicVolume = settings.musicVolume,
+                                muted = settings.muted
+                            )
+                            SoundManager.playAmbient(SoundManager.Sounds.AMBIENT_FARM)
+                        }
+                    }
+
                     when {
                         uiState.isLoading -> {
                             // Splash-equivalent: empty surface while first Room read resolves (<3s cold start, NFR-009).
@@ -50,7 +68,10 @@ class MainActivity : ComponentActivity() {
                             SettingsScreen(
                                 player = uiState.player,
                                 settings = uiState.settings,
-                                onBack = { showSettings = false },
+                                onBack = {
+                                    SoundManager.playSfx(SoundManager.Sounds.BACK)
+                                    showSettings = false
+                                },
                                 onMusicVolumeChange = { v -> viewModel.updateSettings { it.copy(musicVolume = v) } },
                                 onSfxVolumeChange = { v -> viewModel.updateSettings { it.copy(sfxVolume = v) } },
                                 onMuteToggle = { m -> viewModel.updateSettings { it.copy(muted = m) } },
@@ -63,7 +84,10 @@ class MainActivity : ComponentActivity() {
                         else -> {
                             FarmScreen(
                                 viewModel = viewModel,
-                                onOpenSettings = { showSettings = true }
+                                onOpenSettings = {
+                                    SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                                    showSettings = true
+                                }
                             )
                         }
                     }
@@ -78,6 +102,7 @@ class MainActivity : ComponentActivity() {
         if (::repository.isInitialized) {
             viewModel.onAppBackgrounded()
         }
+        SoundManager.pauseAmbient()
     }
 
     override fun onStop() {
@@ -91,6 +116,14 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (::repository.isInitialized) {
             viewModel.onAppForegrounded()
+        }
+        SoundManager.resumeAmbient()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing) {
+            SoundManager.release()
         }
     }
 }

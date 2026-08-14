@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.farmmathbuilder.app.audio.SoundManager
 import com.farmmathbuilder.app.data.repository.FarmRepository
 import com.farmmathbuilder.app.domain.isCrop
 import com.farmmathbuilder.app.domain.SlotAvailability
@@ -74,6 +75,13 @@ fun FarmScreen(
             viewModel.consumeCowFeedSnackbar()
         }
     }
+    // Fires for both a single harvest and "harvest all" — both set this same field
+    // on success, so one hook covers both entry points.
+    LaunchedEffect(uiState.showHarvestCelebrationForCellId) {
+        if (uiState.showHarvestCelebrationForCellId != null) {
+            SoundManager.playSfx(SoundManager.Sounds.HARVEST)
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -108,9 +116,18 @@ fun FarmScreen(
             }
 
             FabColumn(
-                onChallengeClick = { viewModel.startChallenge() },
-                onMathClick = { viewModel.openExercise() },
-                onStatsClick = { showStats = true },
+                onChallengeClick = {
+                    SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                    viewModel.startChallenge()
+                },
+                onMathClick = {
+                    SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                    viewModel.openExercise()
+                },
+                onStatsClick = {
+                    SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                    showStats = true
+                },
                 onSettingsClick = onOpenSettings,
                 modifier = Modifier.align(Alignment.BottomEnd)
             )
@@ -124,20 +141,29 @@ fun FarmScreen(
                 ExpandMapButton(
                     cost = expansionCost,
                     canAfford = (uiState.player?.wheatCurrency ?: 0) >= expansionCost,
-                    onClick = { viewModel.expandGrid() }
+                    onClick = {
+                        SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                        viewModel.expandGrid()
+                    }
                 )
 
                 if (!uiState.isRepositioningBuilding) {
                     MoveBarnButton(
                         enabled = !hasGrowingCropOnMap,
-                        onClick = { viewModel.startRepositioningBuilding() }
+                        onClick = {
+                            SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                            viewModel.startRepositioningBuilding()
+                        }
                     )
                 }
             }
 
             if (uiState.isRepositioningBuilding) {
                 MoveBarnBanner(
-                    onCancel = { viewModel.cancelRepositioningBuilding() },
+                    onCancel = {
+                        SoundManager.playSfx(SoundManager.Sounds.BACK)
+                        viewModel.cancelRepositioningBuilding()
+                    },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
                 )
             }
@@ -158,13 +184,22 @@ fun FarmScreen(
                         slotAvailability = availability,
                         carrotUnlocked = viewModel.isCarrotUnlocked(),
                         carrotUnlockHarvestsRemaining = (FarmRepository.CARROT_UNLOCK_WHEAT_HARVESTS - (uiState.player?.wheatHarvestedTotal ?: 0)).coerceAtLeast(0),
-                        onDismiss = { viewModel.dismissCellPopup() },
-                        onPlantCrop = { cropType -> viewModel.buildFreeOrExtra(cellId, cropType) },
+                        onDismiss = {
+                            SoundManager.playSfx(SoundManager.Sounds.DIALOG_CLOSE)
+                            viewModel.dismissCellPopup()
+                        },
+                        onPlantCrop = { cropType ->
+                            SoundManager.playSfx(SoundManager.Sounds.PLANT)
+                            viewModel.buildFreeOrExtra(cellId, cropType)
+                        },
                         onSolveExercise = {
                             viewModel.dismissCellPopup()
                             viewModel.openExercise()
                         },
-                        onCancelGrowth = { viewModel.cancelGrowth(cellId) },
+                        onCancelGrowth = {
+                            SoundManager.playSfx(SoundManager.Sounds.CANCEL_GROWTH)
+                            viewModel.cancelGrowth(cellId)
+                        },
                         onSolveToSaveTime = { viewModel.openExerciseForTimeReduction(cellId) }
                     )
                 }
@@ -177,7 +212,10 @@ fun FarmScreen(
                     isTimeReduction = uiState.exercisePurposeCellId != null,
                     onAnswer = { viewModel.submitAnswer(it) },
                     onNext = { viewModel.nextExercise() },
-                    onClose = { viewModel.closeExercise() }
+                    onClose = {
+                        SoundManager.playSfx(SoundManager.Sounds.DIALOG_CLOSE)
+                        viewModel.closeExercise()
+                    }
                 )
             }
 
@@ -191,7 +229,10 @@ fun FarmScreen(
                     failed = uiState.challengeFailed,
                     onAnswer = { viewModel.submitChallengeAnswer(it) },
                     onNextQuestion = { viewModel.nextChallengeQuestion() },
-                    onClose = { viewModel.closeChallenge() }
+                    onClose = {
+                        SoundManager.playSfx(SoundManager.Sounds.DIALOG_CLOSE)
+                        viewModel.closeChallenge()
+                    }
                 )
             }
 
@@ -200,7 +241,13 @@ fun FarmScreen(
             }
 
             if (showStats) {
-                StatsDialog(player = uiState.player, onDismiss = { showStats = false })
+                StatsDialog(
+                    player = uiState.player,
+                    onDismiss = {
+                        SoundManager.playSfx(SoundManager.Sounds.DIALOG_CLOSE)
+                        showStats = false
+                    }
+                )
             }
         }
     }
