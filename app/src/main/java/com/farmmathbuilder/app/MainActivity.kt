@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
                                 musicVolume = settings.musicVolume,
                                 muted = settings.muted
                             )
-                            SoundManager.playAmbient(SoundManager.Sounds.AMBIENT_FARM)
+                            SoundManager.playAmbient(SoundManager.Sounds.RIVER_AMBIENT)
                         }
                     }
 

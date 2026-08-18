@@ -27,7 +27,11 @@ object SoundManager {
         const val PLANT = "sfx_plant"
         const val HARVEST = "sfx_harvest"
         const val CANCEL_GROWTH = "sfx_cancel_growth"
-        const val AMBIENT_FARM = "ambient_farm_loop"
+        // Ambient farm sound is being rebuilt piece by piece (was one flat
+        // ambient_farm_loop bed) — this is the first piece: the river backdrop's
+        // own water loop, layered in on its own rather than mixed into a single
+        // catch-all track.
+        const val RIVER_AMBIENT = "river_loop"
     }
 
     private const val MAX_STREAMS = 4

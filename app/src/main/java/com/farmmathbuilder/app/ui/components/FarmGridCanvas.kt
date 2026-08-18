@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale as drawScale
 import androidx.compose.ui.graphics.nativeCanvas
@@ -38,7 +39,9 @@ import com.farmmathbuilder.app.domain.PathType
 import com.farmmathbuilder.app.domain.UiCell
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
@@ -75,6 +78,16 @@ fun FarmGridCanvas(
     var cowFacingRight by remember { mutableStateOf(true) }
     var cowAnimMs by remember { mutableFloatStateOf(0f) }
     var prevGridConfigForCow by remember { mutableStateOf<GridConfig?>(null) }
+
+    // Free-running clock for the river's water animation (highlight glints,
+    // sparkles, drifting spring mist) — independent of the cow's own clock
+    // since it must keep animating even while she's paused/grazing.
+    var riverAnimMs by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            riverAnimMs = withFrameMillis { it }.toFloat()
+        }
+    }
 
     LaunchedEffect(gridConfig) {
         // expandGrid() shifts every existing cell by +1 col/+1 row to keep the
@@ -318,6 +331,25 @@ fun FarmGridCanvas(
         // green ground. The fence (drawn last, below) is now the only visual cue for
         // where the buildable/playable area actually ends.
         drawRect(color = Color(0xFF9CCC65), size = size)
+
+        // Decorative river + woods backdrop, top-right of the play area (founder-
+        // approved design, docs/previews/river-woods-preview.html). Anchored to
+        // grid coordinates outside the boundary fence's row=0 edge — recomputed
+        // from gridConfig.cols/rows every frame, exactly like the fence posts —
+        // so it always sits outside the buildable ring and slides outward with
+        // it as the map expands, never overlapping a playable cell. Drawn before
+        // every gameplay element (cells, barn, cow, fence) so it always renders
+        // as background, underneath them.
+        drawRiverAndWoodsBackdrop(
+            originOffset = originOffset,
+            canvasCenter = canvasCenter,
+            scale = scale,
+            pan = pan,
+            tileW = tileW,
+            tileH = tileH,
+            gridConfig = gridConfig,
+            animMs = riverAnimMs
+        )
 
         for (cell in cells.sortedBy { it.col + it.row }) {
             val baseCx = originOffset.x + GridMath.isoX(cell.col, cell.row, tileW)
@@ -791,6 +823,350 @@ private fun DrawScope.drawFenceRailSegment(from: Offset, to: Offset, unitScale: 
         strokeWidth = u(5f),
         cap = StrokeCap.Round
     )
+}
+
+/**
+ * River + woods backdrop (founder-approved design, docs/previews/river-woods-preview.html):
+ * a rock spring near the grid's top edge feeds a sinuous, reed-banked river
+ * that curves down to the right corner and widens into a small lily-pad pool
+ * tucked under the first tree of a woods cluster. Every position is derived
+ * from [gridConfig] (via [riverPathGrid], in col/row grid units, not pixels)
+ * and re-projected through the same origin/scale/pan transform as every other
+ * element in this file, so the whole backdrop automatically slides outward
+ * and stays outside the boundary fence as the map expands — no separate
+ * "reposition on expand" bookkeeping needed, mirroring how the fence and the
+ * wandering cow already track [gridConfig].
+ */
+private fun DrawScope.drawRiverAndWoodsBackdrop(
+    originOffset: Offset,
+    canvasCenter: Offset,
+    scale: Float,
+    pan: Offset,
+    tileW: Float,
+    tileH: Float,
+    gridConfig: GridConfig,
+    animMs: Float
+) {
+    fun toScreen(col: Float, row: Float): Offset {
+        val bx = originOffset.x + GridMath.isoX(col, row, tileW)
+        val by = originOffset.y + GridMath.isoY(col, row, tileH)
+        return Offset(
+            (bx - canvasCenter.x) * scale + canvasCenter.x + pan.x,
+            (by - canvasCenter.y) * scale + canvasCenter.y + pan.y
+        )
+    }
+
+    val pts = riverPathGrid(gridConfig.cols, gridConfig.rows).map { toScreen(it.x, it.y) }
+    // Preview art (docs/previews/river-woods-preview.html) was tuned against a
+    // 112px reference tile width — same "1 tile-width = 1 unit" convention the
+    // fence (fenceUnitScale) and cow (cowUnitScale) already use.
+    val unitScale = (tileW * scale) / 112f
+
+    drawRiverSpring(pts.first(), unitScale, animMs)
+    val mouth = drawRiverBody(pts, unitScale, animMs)
+    drawRiverWoods(mouth, unitScale)
+}
+
+/** Grid-space (col, row) waypoints for the river's centerline, packed into an
+ * [Offset] purely as a (x=col, y=row) float pair — not a screen coordinate.
+ * Starts partway along the top edge, bows gently outward, and ends at the
+ * grid's right corner where the woods/pool sit (see [drawRiverWoods]). Tighter
+ * to the fence than an earlier pass so it reads as bordering the map rather
+ * than floating off it. */
+private fun riverPathGrid(cols: Int, rows: Int): List<Offset> {
+    val startCol = cols * 0.38f
+    val steps = 14
+    return (0..steps).map { i ->
+        val t = i / steps.toFloat()
+        val col = startCol + (cols - 1 - startCol) * t
+        val bow = kotlin.math.sin(t * Math.PI.toFloat()) * 0.55f
+        val row = -1.25f - bow - t * 0.25f
+        Offset(col, row)
+    }
+}
+
+private fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
+    val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
+    return t * t * (3f - 2f * t)
+}
+
+/** River half-width in preview units (before [unitScale]) at arc-fraction [u]:
+ * fades in from zero at the spring, settles into a gently undulating channel,
+ * then bulges into the mouth's pool near the end. */
+private fun riverWidthUnits(u: Float): Float {
+    val base = 13f + 5f * kotlin.math.sin(u * 2.6f + 0.4f)
+    val sourceFade = smoothstep(0f, 0.14f, u)
+    val poolBulge = smoothstep(0.78f, 1f, u) * 20f
+    return (base + poolBulge) * sourceFade
+}
+
+private fun Float.fract(): Float = this - kotlin.math.floor(this)
+
+/** Offsets a screen-space polyline into parallel left/right edges by a
+ * per-point width (perpendicular to the local tangent) — the same technique
+ * the river-woods preview's `offsetRibbon` uses, ported 1:1. */
+private fun offsetRibbon(points: List<Offset>, widthFn: (Float) -> Float): Pair<List<Offset>, List<Offset>> {
+    val left = ArrayList<Offset>(points.size)
+    val right = ArrayList<Offset>(points.size)
+    for (i in points.indices) {
+        val prev = points[max(0, i - 1)]
+        val next = points[min(points.size - 1, i + 1)]
+        val dx = next.x - prev.x
+        val dy = next.y - prev.y
+        val len = hypot(dx, dy).let { if (it == 0f) 1f else it }
+        val nx = -dy / len
+        val ny = dx / len
+        val w = widthFn(i / (points.size - 1).toFloat())
+        left.add(Offset(points[i].x + nx * w, points[i].y + ny * w))
+        right.add(Offset(points[i].x - nx * w, points[i].y - ny * w))
+    }
+    return left to right
+}
+
+/** Soft dark radial-falloff contact shadow — the same shape/gradient
+ * [drawBarn] uses to ground the barn mesh on the dirt, reused here so the
+ * river's rocks/pool and every tree read as sitting on the ground rather than
+ * pasted over it. */
+private fun DrawScope.drawSoftGroundShadow(center: Offset, rx: Float, ry: Float) {
+    if (rx <= 0f || ry <= 0f) return
+    drawOval(
+        brush = Brush.radialGradient(
+            colorStops = arrayOf(
+                0f to Color(0x66231A0F),
+                0.7f to Color(0x33231A0F),
+                1f to Color(0x00231A0F)
+            ),
+            center = center,
+            radius = rx
+        ),
+        topLeft = Offset(center.x - rx, center.y - ry),
+        size = Size(rx * 2f, ry * 2f)
+    )
+}
+
+/** A single angular rock, ink-outlined like every other shape in this file's
+ * "programmatic 2D" family — used both to frame the spring and to ring the
+ * pool at the river's mouth. */
+private fun DrawScope.drawRiverRock(center: Offset, r: Float, rotationRad: Float) {
+    if (r <= 0f) return
+    rotate(degrees = Math.toDegrees(rotationRad.toDouble()).toFloat(), pivot = center) {
+        val body = Path().apply {
+            moveTo(center.x - r, center.y + r * 0.3f)
+            lineTo(center.x - r * 0.5f, center.y - r * 0.7f)
+            lineTo(center.x + r * 0.3f, center.y - r)
+            lineTo(center.x + r, center.y - r * 0.1f)
+            lineTo(center.x + r * 0.6f, center.y + r * 0.6f)
+            lineTo(center.x - r * 0.2f, center.y + r * 0.8f)
+            close()
+        }
+        drawPath(body, color = Color(0xFF8F8477))
+        val highlight = Path().apply {
+            moveTo(center.x - r * 0.5f, center.y - r * 0.7f)
+            lineTo(center.x + r * 0.3f, center.y - r)
+            lineTo(center.x + r * 0.1f, center.y - r * 0.2f)
+            close()
+        }
+        drawPath(highlight, color = Color(0x2EFFFFFF))
+        drawPath(body, color = Color(0xFF3A332B), style = Stroke(width = 1.6f))
+    }
+}
+
+/** A three-blade reed tuft along the riverbank, using the same seeded-scatter
+ * "blade stroke" grammar as [drawWheatTile]/[drawCarrotTile]'s crop blades. */
+private fun DrawScope.drawRiverReed(anchor: Offset, unitScale: Float, palette: List<Color>) {
+    fun u(v: Float) = v * unitScale
+    val blades = listOf(Triple(-3f, 14f, -3f), Triple(0f, 18f, 1f), Triple(3f, 12f, 4f))
+    blades.forEachIndexed { i, (dx, h, tilt) ->
+        val path = Path().apply {
+            moveTo(anchor.x + u(dx), anchor.y)
+            quadraticTo(
+                anchor.x + u(dx + tilt), anchor.y - u(h * 0.6f),
+                anchor.x + u(dx + tilt * 1.6f), anchor.y - u(h)
+            )
+        }
+        drawPath(path, color = palette[i % palette.size], style = Stroke(width = u(2f), cap = StrokeCap.Round))
+    }
+}
+
+private fun DrawScope.drawMistPuff(center: Offset, r: Float, alpha: Float) {
+    if (r <= 0f || alpha <= 0f) return
+    drawOval(
+        color = Color(0xFFFFFAF0).copy(alpha = alpha.coerceIn(0f, 1f)),
+        topLeft = Offset(center.x - r, center.y - r * 0.65f),
+        size = Size(r * 2f, r * 1.3f)
+    )
+}
+
+/** The river's source: a small cluster of ink-outlined rocks (same brown
+ * family as the fence posts) framing a dark shadowed gap the water "emerges"
+ * from, plus a few soft mist puffs drifting up and fading — reads as water
+ * bubbling out of the terrain rather than a shape starting in blank space. */
+private fun DrawScope.drawRiverSpring(origin: Offset, unitScale: Float, animMs: Float) {
+    fun u(v: Float) = v * unitScale
+    drawSoftGroundShadow(Offset(origin.x, origin.y + u(4f)), u(30f), u(14f))
+
+    val gapR = u(10f)
+    drawOval(
+        color = Color(0x8C231A0F),
+        topLeft = Offset(origin.x + u(2f) - gapR, origin.y - u(2f) - gapR * 0.6f),
+        size = Size(gapR * 2f, gapR * 1.2f)
+    )
+    drawRiverRock(Offset(origin.x - u(16f), origin.y - u(6f)), u(12f), -0.3f)
+    drawRiverRock(Offset(origin.x + u(10f), origin.y - u(12f)), u(15f), 0.4f)
+    drawRiverRock(Offset(origin.x + u(20f), origin.y + u(6f)), u(10f), 0.9f)
+
+    val animSec = animMs / 1000f
+    for (k in 0 until 3) {
+        val phase = animSec * 0.6f + k * 2.1f
+        val riseRaw = phase * 6f
+        val rise = riseRaw - 26f * kotlin.math.floor(riseRaw / 26f)
+        val alpha = 0.35f * (1f - rise / 26f)
+        drawMistPuff(
+            Offset(origin.x - u(4f) + u(kotlin.math.sin(phase) * 6f), origin.y - u(14f) - u(rise)),
+            u(9f - rise * 0.15f),
+            alpha
+        )
+    }
+}
+
+/** The river channel itself: reed-lined banks, a fading-in-then-flowing water
+ * body with animated highlight glints + sparkles, and a small lily-pad pool
+ * ringed with rocks at the mouth. Returns the mouth point so [drawRiverWoods]
+ * can anchor the tree cluster directly off it. */
+private fun DrawScope.drawRiverBody(pts: List<Offset>, unitScale: Float, animMs: Float): Offset {
+    val (left, right) = offsetRibbon(pts) { u -> riverWidthUnits(u) * unitScale }
+
+    val reedPalette = listOf(Color(0xFF558B2F), Color(0xFF689F38), Color(0xFF2E7D32), Color(0xFF43A047))
+    listOf(0.3f, 0.48f, 0.62f, 0.72f).forEachIndexed { i, uFrac ->
+        val idx = (uFrac * (pts.size - 1)).roundToInt().coerceIn(0, pts.size - 1)
+        val side = if (i % 2 == 0) left else right
+        drawRiverReed(side[idx], unitScale, reedPalette)
+    }
+
+    val waterPath = Path().apply {
+        moveTo(left.first().x, left.first().y)
+        left.forEach { lineTo(it.x, it.y) }
+        for (i in right.indices.reversed()) lineTo(right[i].x, right[i].y)
+        close()
+    }
+    drawPath(
+        waterPath,
+        brush = Brush.linearGradient(
+            colorStops = arrayOf(
+                0f to Color(0x005FB3D9),
+                0.18f to Color(0xFF6FC2E6),
+                1f to Color(0xFF3F8FC4)
+            ),
+            start = pts.first(),
+            end = pts.last()
+        )
+    )
+    drawPath(waterPath, color = Color(0x8C3A332B), style = Stroke(width = 1.6f))
+
+    clipPath(waterPath) {
+        val animSec = animMs / 1000f
+        for (k in 0 until 4) {
+            val u = 0.16f + (animSec * 0.22f + k / 4f).fract() * 0.84f
+            val idx = (u * (pts.size - 1)).toInt().coerceIn(0, pts.size - 1)
+            val p = pts[idx]
+            val alpha = (0.5f * kotlin.math.sin(((u - 0.16f) / 0.84f) * Math.PI.toFloat()) + 0.12f).coerceIn(0f, 1f)
+            rotate(degrees = 23f, pivot = p) {
+                drawOval(
+                    color = Color.White.copy(alpha = alpha),
+                    topLeft = Offset(p.x - unitScale * 11f, p.y - unitScale * 4.5f),
+                    size = Size(unitScale * 22f, unitScale * 9f)
+                )
+            }
+        }
+        // Fixed seed (matches the preview's mulberry32(7)) — only the sparkles'
+        // position-along-path advances with animSec, their scatter pattern
+        // itself stays stable frame to frame.
+        val rnd = Random(7)
+        for (k in 0 until 10) {
+            val u = 0.16f + (animSec * 0.4f + rnd.nextFloat()).fract() * 0.84f
+            val idx = (u * (pts.size - 1)).toInt().coerceIn(0, pts.size - 1)
+            val p = pts[idx]
+            val jitter = (rnd.nextFloat() - 0.5f) * unitScale * 12f
+            val sparkle = (kotlin.math.sin(animSec * 6f + k) + 1f) / 2f
+            drawCircle(
+                color = Color.White.copy(alpha = (0.3f + sparkle * 0.5f).coerceIn(0f, 1f)),
+                radius = unitScale * 1.5f,
+                center = Offset(p.x + jitter, p.y + jitter * 0.4f)
+            )
+        }
+    }
+
+    val mouth = pts.last()
+    drawRiverRock(Offset(mouth.x - unitScale * 24f, mouth.y + unitScale * 6f), unitScale * 9f, -0.5f)
+    drawRiverRock(Offset(mouth.x + unitScale * 14f, mouth.y - unitScale * 16f), unitScale * 8f, 0.2f)
+    for ((dx, dy) in listOf(-8f to 6f, 10f to -4f, -2f to -14f)) {
+        val cx = mouth.x + unitScale * dx
+        val cy = mouth.y + unitScale * dy
+        val rx = unitScale * 6f
+        val ry = unitScale * 3.6f
+        drawOval(color = Color(0xFF2E7D32), topLeft = Offset(cx - rx, cy - ry), size = Size(rx * 2f, ry * 2f))
+        drawOval(color = Color(0xFF3A332B), topLeft = Offset(cx - rx, cy - ry), size = Size(rx * 2f, ry * 2f), style = Stroke(width = unitScale * 1f))
+    }
+
+    return mouth
+}
+
+/** Woods cluster anchored directly off the river's own mouth point (rather
+ * than an independent grid position) so the primary tree's canopy overlaps
+ * the pool edge and the river visibly flows into the woods. */
+private fun DrawScope.drawRiverWoods(mouth: Offset, unitScale: Float) {
+    val palA = listOf(Color(0xFF2E7D32), Color(0xFF1B5E20), Color(0xFF43A047), Color(0xFF1B5E20))
+    val palB = listOf(Color(0xFF558B2F), Color(0xFF33691E), Color(0xFF689F38), Color(0xFF33691E))
+    data class TreeSpec(val dx: Float, val dy: Float, val s: Float, val pal: List<Color>)
+    val positions = listOf(
+        TreeSpec(22f, -20f, 1.15f, palA),
+        TreeSpec(-14f, -34f, 0.85f, palB),
+        TreeSpec(40f, -6f, 0.9f, palA),
+        TreeSpec(8f, -46f, 0.7f, palB),
+        TreeSpec(54f, -28f, 0.75f, palA),
+        TreeSpec(-2f, -58f, 0.8f, palB)
+    )
+    for (spec in positions) {
+        drawRiverTree(
+            Offset(mouth.x + unitScale * spec.dx, mouth.y + unitScale * spec.dy),
+            unitScale * spec.s,
+            spec.pal
+        )
+    }
+}
+
+/** A single tree: trunk + 4 lobed, ink-outlined canopy blobs (same rounded
+ * language as [drawWanderingCow]'s body/head ovals), a warm highlight fleck
+ * matching the cow's snout/eye highlights, and a ground-contact shadow. */
+private fun DrawScope.drawRiverTree(anchor: Offset, scale: Float, palette: List<Color>) {
+    drawSoftGroundShadow(Offset(anchor.x, anchor.y + scale * 6f), scale * 22f, scale * 10f)
+
+    drawLine(
+        color = Color(0xFF6D5638),
+        start = Offset(anchor.x, anchor.y + scale * 8f),
+        end = Offset(anchor.x, anchor.y - scale * 2f),
+        strokeWidth = scale * 4f,
+        cap = StrokeCap.Round
+    )
+
+    val blobs = listOf(Triple(0f, -18f, 15f), Triple(-11f, -10f, 11f), Triple(11f, -9f, 11f), Triple(0f, -6f, 13f))
+    blobs.forEachIndexed { i, (dx, dy, r) ->
+        val cx = anchor.x + dx * scale
+        val cy = anchor.y + dy * scale
+        val rx = r * scale
+        val ry = r * 0.85f * scale
+        drawOval(color = palette[i % palette.size], topLeft = Offset(cx - rx, cy - ry), size = Size(rx * 2f, ry * 2f))
+        drawOval(color = Color(0xFF3A332B), topLeft = Offset(cx - rx, cy - ry), size = Size(rx * 2f, ry * 2f), style = Stroke(width = scale * 1.6f))
+    }
+
+    val hlCenter = Offset(anchor.x - scale * 6f, anchor.y - scale * 22f)
+    rotate(degrees = -23f, pivot = hlCenter) {
+        drawOval(
+            color = Color(0xFFFFFAF0).copy(alpha = 0.55f),
+            topLeft = Offset(hlCenter.x - scale * 4f, hlCenter.y - scale * 2.6f),
+            size = Size(scale * 8f, scale * 5.2f)
+        )
+    }
 }
 
 private fun gridOrigin(canvasCenter: Offset, tileW: Float, tileH: Float, cols: Int, rows: Int): Offset {
