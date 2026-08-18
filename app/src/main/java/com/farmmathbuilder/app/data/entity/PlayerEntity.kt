@@ -22,12 +22,6 @@ data class PlayerEntity(
     val gridCols: Int = 6,
     val gridRows: Int = 8,
     val gridExpansionLevel: Int = 0,
-    val buildableRadius: Int = 3,
-    /** Top-left anchor of the Farm Building's 2x2 footprint; null = default grid
-     * center (see GridMath.defaultBuildingAnchorCol/Row). Set once the player uses
-     * "move barn" (FarmRepository.moveBuilding). */
-    val buildingAnchorCol: Int? = null,
-    val buildingAnchorRow: Int? = null,
     /** Wheat-only harvest count — carrot's unlock gate specifically watches this,
      * not [fieldsCompletedTotal] (which mixes in carrot harvests once unlocked). */
     val wheatHarvestedTotal: Int = 0,

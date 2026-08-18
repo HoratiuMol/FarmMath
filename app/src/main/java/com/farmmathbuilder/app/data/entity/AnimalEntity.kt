@@ -17,5 +17,11 @@ data class AnimalEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val type: AnimalType = AnimalType.COW,
     val bornAtTimestamp: Long,
-    val lastFedTimestamp: Long
+    val lastFedTimestamp: Long,
+    /** Real-world creation time, used only for lifespan/death (see AnimalLifespan) —
+     * kept separate from [bornAtTimestamp] because that field is deliberately
+     * backdated by CALF_GROWTH_DURATION_MS when a cow is bought or seeded so she
+     * starts as an adult; reusing it for lifespan would make every purchased cow
+     * die instantly. */
+    val spawnedAtTimestamp: Long = bornAtTimestamp
 )

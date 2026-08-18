@@ -12,8 +12,7 @@ data class UiCell(
     val growthDurationMs: Long,
     val pathType: PathType?,
     val pathRotationDegrees: Int,
-    val isBuildingCell: Boolean,
-    val isWithinBuildableRadius: Boolean
+    val isBuildable: Boolean
 ) {
     val isEmpty: Boolean get() = occupantType == OccupantType.EMPTY
     val isMature: Boolean get() = occupantType.isCrop() && growthPhase == GrowthPhase.MATURE

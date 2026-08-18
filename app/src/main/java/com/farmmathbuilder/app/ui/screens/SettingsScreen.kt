@@ -10,13 +10,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,9 +36,14 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -200,9 +212,11 @@ fun SettingsScreen(
     onTextSizeChange: (TextSizeOption) -> Unit,
     onHighContrastToggle: (Boolean) -> Unit,
     onNotificationsToggle: (Boolean) -> Unit,
-    onAgeBandChange: (AgeBand) -> Unit
+    onAgeBandChange: (AgeBand) -> Unit,
+    onNewWorld: () -> Unit
 ) {
     val s = settings ?: SettingsEntity()
+    var showNewWorldConfirm by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -224,6 +238,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
@@ -300,6 +315,42 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            // Bottom-of-menu "danger zone": wipes the save and starts over. Kept
+            // visually distinct (warning icon, red button) and gated behind a
+            // confirmation dialog since it's destructive and irreversible.
+            SettingsSection(icon = Icons.Filled.RestartAlt, title = "New world") {
+                Text(
+                    "Wipes your farm, crops, wheat, and animals, and starts a brand new world from scratch. This can't be undone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Button(
+                    onClick = { showNewWorldConfirm = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Warning, contentDescription = null)
+                    Text("New world", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
         }
+    }
+
+    if (showNewWorldConfirm) {
+        AlertDialog(
+            onDismissRequest = { showNewWorldConfirm = false },
+            title = { Text("Start a new world?") },
+            text = { Text("This permanently deletes your current farm, crops, wheat, and animals. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNewWorldConfirm = false
+                    onNewWorld()
+                }) { Text("Delete and start over", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewWorldConfirm = false }) { Text("Cancel") }
+            }
+        )
     }
 }

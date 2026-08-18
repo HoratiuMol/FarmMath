@@ -20,19 +20,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.farmmathbuilder.app.audio.SoundManager
 import com.farmmathbuilder.app.data.repository.FarmRepository
-import com.farmmathbuilder.app.domain.isCrop
 import com.farmmathbuilder.app.domain.SlotAvailability
 import com.farmmathbuilder.app.ui.components.AnimalShopColumn
 import com.farmmathbuilder.app.ui.components.CellActionDialog
 import com.farmmathbuilder.app.ui.components.ChallengeDialog
 import com.farmmathbuilder.app.ui.components.ConfettiOverlay
+import com.farmmathbuilder.app.ui.components.DecorationPickerDialog
+import com.farmmathbuilder.app.ui.components.DecorationPlacementBanner
 import com.farmmathbuilder.app.ui.components.ExpandMapButton
 import com.farmmathbuilder.app.ui.components.FabColumn
 import com.farmmathbuilder.app.ui.components.FarmGridCanvas
 import com.farmmathbuilder.app.ui.components.HarvestAllButton
 import com.farmmathbuilder.app.ui.components.MathExerciseDialog
-import com.farmmathbuilder.app.ui.components.MoveBarnBanner
-import com.farmmathbuilder.app.ui.components.MoveBarnButton
 import com.farmmathbuilder.app.ui.components.StatsDialog
 import com.farmmathbuilder.app.ui.components.TopHud
 import com.farmmathbuilder.app.viewmodel.FarmViewModel
@@ -64,12 +63,6 @@ fun FarmScreen(
             viewModel.consumeExpandGridSnackbar()
         }
     }
-    LaunchedEffect(uiState.moveBuildingSnackbar) {
-        uiState.moveBuildingSnackbar?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.consumeMoveBuildingSnackbar()
-        }
-    }
     LaunchedEffect(uiState.cowFeedSnackbar) {
         uiState.cowFeedSnackbar?.let {
             snackbarHostState.showSnackbar(it)
@@ -80,6 +73,18 @@ fun FarmScreen(
         uiState.cowShopSnackbar?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.consumeCowShopSnackbar()
+        }
+    }
+    LaunchedEffect(uiState.cowDiedSnackbar) {
+        uiState.cowDiedSnackbar?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeCowDiedSnackbar()
+        }
+    }
+    LaunchedEffect(uiState.decorationSnackbar) {
+        uiState.decorationSnackbar?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeDecorationSnackbar()
         }
     }
     // Fires for both a single harvest and "harvest all" — both set this same field
@@ -100,10 +105,14 @@ fun FarmScreen(
                 highlightedCellId = null,
                 onCellTapped = { cellId -> viewModel.onCellTapped(cellId) },
                 modifier = Modifier.fillMaxSize(),
-                isRepositioningBuilding = uiState.isRepositioningBuilding,
-                onRepositionTarget = { col, row -> viewModel.onRepositionTarget(col, row) },
                 cows = uiState.cows,
-                onCowTapped = { animalId -> viewModel.feedCow(animalId) }
+                onCowTapped = { animalId -> viewModel.feedCow(animalId) },
+                decorations = uiState.decorations,
+                placingDecorationType = uiState.placingDecorationType,
+                onDecorationPlacementTarget = { side, fraction ->
+                    SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                    viewModel.onDecorationPlacementTarget(side, fraction)
+                }
             )
 
             val matureCount = uiState.cells.count { it.isMature }
@@ -128,6 +137,10 @@ fun FarmScreen(
                     SoundManager.playSfx(SoundManager.Sounds.CLICK)
                     viewModel.buyCow()
                 },
+                onOpenDecorationShop = {
+                    SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                    viewModel.openDecorationPicker()
+                },
                 modifier = Modifier.align(Alignment.TopEnd)
             )
 
@@ -148,7 +161,6 @@ fun FarmScreen(
                 modifier = Modifier.align(Alignment.BottomEnd)
             )
 
-            val hasGrowingCropOnMap = uiState.cells.any { it.occupantType.isCrop() }
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -162,23 +174,26 @@ fun FarmScreen(
                         viewModel.expandGrid()
                     }
                 )
-
-                if (!uiState.isRepositioningBuilding) {
-                    MoveBarnButton(
-                        enabled = !hasGrowingCropOnMap,
-                        onClick = {
-                            SoundManager.playSfx(SoundManager.Sounds.CLICK)
-                            viewModel.startRepositioningBuilding()
-                        }
-                    )
-                }
             }
 
-            if (uiState.isRepositioningBuilding) {
-                MoveBarnBanner(
+            if (uiState.decorationPickerOpen) {
+                DecorationPickerDialog(
+                    onDismiss = {
+                        SoundManager.playSfx(SoundManager.Sounds.DIALOG_CLOSE)
+                        viewModel.dismissDecorationPicker()
+                    },
+                    onPick = { type ->
+                        SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                        viewModel.startPlacingDecoration(type)
+                    }
+                )
+            }
+
+            if (uiState.placingDecorationType != null) {
+                DecorationPlacementBanner(
                     onCancel = {
                         SoundManager.playSfx(SoundManager.Sounds.BACK)
-                        viewModel.cancelRepositioningBuilding()
+                        viewModel.cancelPlacingDecoration()
                     },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
                 )

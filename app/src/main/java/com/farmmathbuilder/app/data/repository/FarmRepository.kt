@@ -2,15 +2,20 @@ package com.farmmathbuilder.app.data.repository
 
 import com.farmmathbuilder.app.data.dao.AnimalDao
 import com.farmmathbuilder.app.data.dao.CellDao
+import com.farmmathbuilder.app.data.dao.DecorationDao
 import com.farmmathbuilder.app.data.dao.PlayerDao
 import com.farmmathbuilder.app.data.dao.SettingsDao
 import com.farmmathbuilder.app.data.entity.AnimalEntity
 import com.farmmathbuilder.app.data.entity.CellEntity
+import com.farmmathbuilder.app.data.entity.DecorationEntity
 import com.farmmathbuilder.app.data.entity.PlayerEntity
 import com.farmmathbuilder.app.data.entity.SettingsEntity
 import com.farmmathbuilder.app.domain.AgeBand
 import com.farmmathbuilder.app.domain.AnimalGrowth
+import com.farmmathbuilder.app.domain.AnimalLifespan
 import com.farmmathbuilder.app.domain.AnimalType
+import com.farmmathbuilder.app.domain.DecorationSide
+import com.farmmathbuilder.app.domain.DecorationType
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.GridMath
 import com.farmmathbuilder.app.domain.GrowthCalculator
@@ -39,13 +44,15 @@ class FarmRepository(
     private val cellDao: CellDao,
     private val playerDao: PlayerDao,
     private val settingsDao: SettingsDao,
-    private val animalDao: AnimalDao
+    private val animalDao: AnimalDao,
+    private val decorationDao: DecorationDao
 ) {
 
     val cells: Flow<List<CellEntity>> = cellDao.observeAll()
     val player: Flow<PlayerEntity?> = playerDao.observe()
     val settings: Flow<SettingsEntity?> = settingsDao.observe()
     val animals: Flow<List<AnimalEntity>> = animalDao.observeAll()
+    val decorations: Flow<List<DecorationEntity>> = decorationDao.observeAll()
 
     /**
      * Testing aid: the player's wheat currency is floored at [TEST_MIN_WHEAT]
@@ -62,17 +69,10 @@ class FarmRepository(
         cellList.map { it.toUiCell(config = config) }
     }
 
-    /** Resolves a player's persisted grid state into a [GridConfig], falling back to
-     * the default (centered) building anchor when the player hasn't moved it yet. */
+    /** Resolves a player's persisted grid state into a [GridConfig]. */
     private fun configFor(p: PlayerEntity?): GridConfig {
         if (p == null) return GridConfig.BASE
-        return GridConfig(
-            cols = p.gridCols,
-            rows = p.gridRows,
-            buildableRadius = p.buildableRadius,
-            buildingAnchorCol = p.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(p.gridCols),
-            buildingAnchorRow = p.buildingAnchorRow ?: GridMath.defaultBuildingAnchorRow(p.gridRows)
-        )
+        return GridConfig(cols = p.gridCols, rows = p.gridRows)
     }
 
     private fun CellEntity.toUiCell(now: Long = System.currentTimeMillis(), config: GridConfig): UiCell {
@@ -93,28 +93,26 @@ class FarmRepository(
             growthDurationMs = growthDurationMs,
             pathType = pathType,
             pathRotationDegrees = pathRotationDegrees,
-            isBuildingCell = GridMath.isBuildingCell(col, row, config.buildingAnchorCol, config.buildingAnchorRow),
-            isWithinBuildableRadius = GridMath.isWithinBuildableRadius(col, row, config.cols, config.rows, config.buildableRadius, config.buildingAnchorCol, config.buildingAnchorRow)
+            isBuildable = GridMath.isBuildable(col, row, config.cols, config.rows)
         )
     }
 
-    /** Creates the starting BASE_COLS x BASE_ROWS grid with the central 2x2 Farm Building. */
+    /** Creates the starting BASE_COLS x BASE_ROWS grid. The Farm Building lives
+     * entirely outside the grid now (see FarmGridCanvas), so every cell starts
+     * EMPTY — no footprint to carve out. */
     suspend fun ensureGridInitialized() {
         if (cellDao.count() > 0) return
         val cols = GridMath.BASE_COLS
         val rows = GridMath.BASE_ROWS
-        val anchorCol = GridMath.defaultBuildingAnchorCol(cols)
-        val anchorRow = GridMath.defaultBuildingAnchorRow(rows)
         val cells = mutableListOf<CellEntity>()
         for (row in 0 until rows) {
             for (col in 0 until cols) {
-                val occupant = if (GridMath.isBuildingCell(col, row, anchorCol, anchorRow)) OccupantType.BUILDING else OccupantType.EMPTY
                 cells.add(
                     CellEntity(
                         id = GridMath.cellId(col, row, cols),
                         col = col,
                         row = row,
-                        occupantType = occupant
+                        occupantType = OccupantType.EMPTY
                     )
                 )
             }
@@ -128,7 +126,11 @@ class FarmRepository(
             playerDao.insert(
                 PlayerEntity(
                     lastDailyResetTimestamp = System.currentTimeMillis(),
-                    wheatCurrency = TEST_MIN_WHEAT
+                    wheatCurrency = TEST_MIN_WHEAT,
+                    // Founder request 2026-08-18: a fresh save starts with 10
+                    // carrots already stockpiled (feeds the 2 starting cows a
+                    // few times before the player needs to grow/harvest any).
+                    carrotInventory = STARTING_CARROTS
                 )
             )
         } else if (existing.wheatCurrency < TEST_MIN_WHEAT) {
@@ -146,21 +148,60 @@ class FarmRepository(
         }
     }
 
-    /** Seeds the player's first (free) cow — every save starts owning one, same
-     * as the old single decorative cow did before animals became a real list. */
+    /** Seeds the player's starting herd — founder request 2026-08-18: 2 cows
+     * (was 1) so breeding/feeding has something to work with from minute one. */
     suspend fun ensureAnimalsInitialized() {
         if (animalDao.count() > 0) return
         val now = System.currentTimeMillis()
-        animalDao.insert(
-            AnimalEntity(
-                type = AnimalType.COW,
-                // Backdated so she's already an adult, not a newborn calf.
-                bornAtTimestamp = now - AnimalGrowth.CALF_GROWTH_DURATION_MS,
-                // Starts "just fed" so a new save doesn't open with the hunger
-                // icon already showing — see CowHunger.
-                lastFedTimestamp = now
+        repeat(STARTING_COWS) {
+            animalDao.insert(
+                AnimalEntity(
+                    type = AnimalType.COW,
+                    // Backdated so she's already an adult, not a newborn calf.
+                    bornAtTimestamp = now - AnimalGrowth.CALF_GROWTH_DURATION_MS,
+                    // Starts "just fed" so a new save doesn't open with the hunger
+                    // icon already showing — see CowHunger.
+                    lastFedTimestamp = now,
+                    // NOT backdated, unlike bornAtTimestamp above — her 20-minute
+                    // lifespan (AnimalLifespan) starts from actual real time.
+                    spawnedAtTimestamp = now
+                )
+            )
+        }
+    }
+
+    /** Seeds the map's standard starting decoration — founder request
+     * 2026-08-18: a river at its original fixed spot (top edge, 38% of the way
+     * along it — the same position the old always-on backdrop used before
+     * decorations became player-placed). Counts toward [maxDecorations], so the
+     * first *additional* river only becomes placeable after the first map
+     * expansion. */
+    suspend fun ensureDecorationsInitialized() {
+        if (decorationDao.count() > 0) return
+        decorationDao.insert(DecorationEntity(type = DecorationType.RIVER, side = DecorationSide.TOP, alongFraction = 0.38f))
+    }
+
+    /**
+     * Settings menu "New world" (founder request): wipes cells/player/animals/
+     * decorations and reseeds a fresh starting save, same shape [initializeAll]
+     * builds for a brand new install — settings (sound/text/notifications
+     * prefs) are deliberately left untouched since those are app preferences,
+     * not world state.
+     */
+    suspend fun resetWorld() {
+        cellDao.deleteAll()
+        animalDao.deleteAll()
+        decorationDao.deleteAll()
+        playerDao.insert(
+            PlayerEntity(
+                lastDailyResetTimestamp = System.currentTimeMillis(),
+                wheatCurrency = TEST_MIN_WHEAT,
+                carrotInventory = STARTING_CARROTS
             )
         )
+        ensureGridInitialized()
+        ensureAnimalsInitialized()
+        ensureDecorationsInitialized()
     }
 
     suspend fun initializeAll() {
@@ -168,6 +209,7 @@ class FarmRepository(
         ensurePlayerInitialized()
         ensureSettingsInitialized()
         ensureAnimalsInitialized()
+        ensureDecorationsInitialized()
     }
 
     /**
@@ -352,7 +394,7 @@ class FarmRepository(
         if (cell.occupantType != OccupantType.EMPTY) return false
         val p = playerDao.get() ?: return false
         val config = configFor(p)
-        if (!GridMath.isWithinBuildableRadius(cell.col, cell.row, config.cols, config.rows, config.buildableRadius, config.buildingAnchorCol, config.buildingAnchorRow)) return false
+        if (!GridMath.isBuildable(cell.col, cell.row, config.cols, config.rows)) return false
         cellDao.update(
             cell.copy(
                 occupantType = OccupantType.PATH,
@@ -373,12 +415,12 @@ class FarmRepository(
 
     /**
      * Founder request "ampliar celdas y alargar el mapa": grows the grid symmetrically
-     * by one ring (+2 cols, +2 rows, buildable radius +1), costing wheat currency.
-     * Every existing cell (including the 2x2 building) shifts col/row by +1 to make
-     * room for the new left/top ring, so its id (which depends on cols) is recomputed;
-     * new border cells are inserted as EMPTY. Because the shift is symmetric, the
-     * building's position relative to the new grid center falls out unchanged from
-     * GridMath.isBuildingCell without any special-casing.
+     * by one ring (+2 cols, +2 rows), costing wheat currency. Every existing cell
+     * shifts col/row by +1 to make room for the new left/top ring, so its id (which
+     * depends on cols) is recomputed; new border cells are inserted as EMPTY. The
+     * Farm Building lives outside the grid (see FarmGridCanvas) and is repositioned
+     * for free every expansion purely from cols/rows at draw time, so there's no
+     * player-facing anchor to shift here any more.
      */
     suspend fun expandGrid(): Boolean {
         val p = playerDao.get() ?: return false
@@ -421,78 +463,9 @@ class FarmRepository(
                 wheatCurrency = p.wheatCurrency - cost,
                 gridCols = newCols,
                 gridRows = newRows,
-                gridExpansionLevel = p.gridExpansionLevel + 1,
-                buildableRadius = p.buildableRadius + 1,
-                // A null anchor (never manually moved) stays null: the default-center
-                // formula already recenters correctly on the new cols/rows because the
-                // grid grows symmetrically. A custom anchor (player used "move barn")
-                // must shift by the same +1/+1 as every cell above, or the building
-                // would visually jump relative to the rest of the map.
-                buildingAnchorCol = p.buildingAnchorCol?.plus(1),
-                buildingAnchorRow = p.buildingAnchorRow?.plus(1)
+                gridExpansionLevel = p.gridExpansionLevel + 1
             )
         )
-        return true
-    }
-
-    /** "Move barn" is only offered while no crop (wheat or carrot) is growing/mature
-     * anywhere on the map — moving it mid-harvest would silently orphan a crop under
-     * the new footprint (its 4 cells are hard-required EMPTY, see [moveBuilding]). */
-    suspend fun canRepositionBuilding(): Boolean =
-        cellDao.getAll().none { it.occupantType.isCrop() }
-
-    /** True if a building anchored at (anchorCol, anchorRow) would (a) fit inside the
-     * buildable ring without touching the fenced-off border and (b) land only on
-     * cells that are empty or already part of the *current* building (so tapping the
-     * barn's own footprint is always a harmless no-op, not a rejected move). */
-    suspend fun isValidBuildingTarget(anchorCol: Int, anchorRow: Int): Boolean {
-        val p = playerDao.get() ?: return false
-        if (!GridMath.isValidBuildingAnchor(anchorCol, anchorRow, p.gridCols, p.gridRows)) return false
-        val oldAnchorCol = p.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(p.gridCols)
-        val oldAnchorRow = p.buildingAnchorRow ?: GridMath.defaultBuildingAnchorRow(p.gridRows)
-        val targetCells = cellDao.getAll().filter { GridMath.isBuildingCell(it.col, it.row, anchorCol, anchorRow) }
-        if (targetCells.size != 4) return false
-        return targetCells.all {
-            it.occupantType == OccupantType.EMPTY || GridMath.isBuildingCell(it.col, it.row, oldAnchorCol, oldAnchorRow)
-        }
-    }
-
-    /**
-     * Founder request "reposicionar el granero": relocates the Farm Building's 2x2
-     * footprint to a new anchor, only while [canRepositionBuilding] holds (no wheat
-     * anywhere — see its doc). The old footprint's cells revert to EMPTY, the new
-     * footprint's cells become BUILDING, and the player's persisted anchor moves —
-     * everything else (paths, the fence ring, buildable radius) is untouched.
-     */
-    suspend fun moveBuilding(newAnchorCol: Int, newAnchorRow: Int): Boolean {
-        val p = playerDao.get() ?: return false
-        val allCells = cellDao.getAll()
-        if (allCells.any { it.occupantType.isCrop() }) return false
-        if (!GridMath.isValidBuildingAnchor(newAnchorCol, newAnchorRow, p.gridCols, p.gridRows)) return false
-
-        val oldAnchorCol = p.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(p.gridCols)
-        val oldAnchorRow = p.buildingAnchorRow ?: GridMath.defaultBuildingAnchorRow(p.gridRows)
-        if (newAnchorCol == oldAnchorCol && newAnchorRow == oldAnchorRow) return false
-
-        val targetCells = allCells.filter { GridMath.isBuildingCell(it.col, it.row, newAnchorCol, newAnchorRow) }
-        if (targetCells.size != 4) return false
-        val targetsAreFree = targetCells.all {
-            it.occupantType == OccupantType.EMPTY || GridMath.isBuildingCell(it.col, it.row, oldAnchorCol, oldAnchorRow)
-        }
-        if (!targetsAreFree) return false
-
-        val changedCells = allCells.mapNotNull { cell ->
-            val wasBuilding = GridMath.isBuildingCell(cell.col, cell.row, oldAnchorCol, oldAnchorRow)
-            val willBeBuilding = GridMath.isBuildingCell(cell.col, cell.row, newAnchorCol, newAnchorRow)
-            when {
-                willBeBuilding && !wasBuilding -> cell.copy(occupantType = OccupantType.BUILDING)
-                wasBuilding && !willBeBuilding -> cell.copy(occupantType = OccupantType.EMPTY, pathType = null, pathRotationDegrees = 0)
-                else -> null
-            }
-        }
-        if (changedCells.isNotEmpty()) cellDao.updateAll(changedCells)
-
-        updatePlayer(p.copy(buildingAnchorCol = newAnchorCol, buildingAnchorRow = newAnchorRow))
         return true
     }
 
@@ -598,7 +571,8 @@ class FarmRepository(
             AnimalEntity(
                 type = AnimalType.COW,
                 bornAtTimestamp = now - AnimalGrowth.CALF_GROWTH_DURATION_MS,
-                lastFedTimestamp = now
+                lastFedTimestamp = now,
+                spawnedAtTimestamp = now
             )
         )
         updatePlayer(p.copy(wheatCurrency = p.wheatCurrency - COW_COST))
@@ -630,7 +604,7 @@ class FarmRepository(
         if (feedCount >= 2) {
             nextFeedCount = 0
             if (animalDao.count() < maxCows(p) && Random.nextFloat() < COW_BREEDING_CHANCE) {
-                animalDao.insert(AnimalEntity(type = AnimalType.COW, bornAtTimestamp = now, lastFedTimestamp = now))
+                animalDao.insert(AnimalEntity(type = AnimalType.COW, bornAtTimestamp = now, lastFedTimestamp = now, spawnedAtTimestamp = now))
                 calfBorn = true
             }
         }
@@ -644,6 +618,17 @@ class FarmRepository(
         return CowFeedResult(fed = true, calfBorn = calfBorn)
     }
 
+    /** Removes every cow past [AnimalLifespan.LIFESPAN_MS] and returns the ones
+     * removed (so the ViewModel can surface a "a cow died" moment) — called once
+     * per ticker second from FarmViewModel, same cadence as the growth/hunger
+     * recompute. No floor on herd size: if every cow dies, the player buys or
+     * breeds a new one same as starting from zero. */
+    suspend fun removeDeadAnimals(now: Long = System.currentTimeMillis()): List<AnimalEntity> {
+        val dead = animalDao.getAll().filter { AnimalLifespan.isDead(it.spawnedAtTimestamp, now) }
+        dead.forEach { animalDao.deleteById(it.id) }
+        return dead
+    }
+
     suspend fun currentPlayer(): PlayerEntity? = player.first()
 
     /** [fed]: whether the carrot was spent and the animal's hunger reset (false
@@ -651,6 +636,34 @@ class FarmRepository(
      * whether this feed happened to be the 2nd-in-a-row breeding roll and it
      * succeeded — lets the ViewModel surface a "a calf was born!" moment. */
     data class CowFeedResult(val fed: Boolean, val calfBorn: Boolean)
+
+    // ---------- Map decorations (founder request: "accidentes geográficos" shop) ----------
+
+    /** Founder request 2026-08-18 ("por cada expansión es un elemento decorativo
+     * geográfico nuevo"): population cap grows with the map — 1 base slot
+     * (the standard river every save starts with, see [ensureDecorationsInitialized])
+     * +1 per expansion — same shape as [maxCows]. */
+    fun maxDecorations(p: PlayerEntity): Int = DECORATION_BASE_CAP + p.gridExpansionLevel
+
+    /**
+     * Places a *new* decoration of [type] at a spot on border edge [side],
+     * [alongFraction] of the way along it (0..1) — founder request 2026-08-18:
+     * picking a decoration always adds another instance rather than moving an
+     * existing one ("si selecciono el río, me pone un río nuevo, no me mueve el
+     * actual"), gated by [maxDecorations] so the count of decorations tracks
+     * map expansions the same way the cow pen does. Free (no wheat cost) —
+     * this is pure cosmetics, not economy. The stored (side, alongFraction) is
+     * deliberately relative rather than an absolute col/row — FarmGridCanvas
+     * re-projects it onto the grid's *current* cols/rows every frame, so it
+     * automatically stays outside the fence and in the same relative spot
+     * through every future map expansion with no migration needed here.
+     */
+    suspend fun placeDecoration(type: DecorationType, side: DecorationSide, alongFraction: Float): Boolean {
+        val p = playerDao.get() ?: return false
+        if (decorationDao.count() >= maxDecorations(p)) return false
+        decorationDao.insert(DecorationEntity(type = type, side = side, alongFraction = alongFraction.coerceIn(0f, 1f)))
+        return true
+    }
 
     companion object {
         const val TEST_MIN_WHEAT = 100
@@ -666,5 +679,12 @@ class FarmRepository(
         const val COW_CAP_PER_EXPANSION = 5
         /** Founder request: 25% chance per breeding roll (every 2nd feed). */
         const val COW_BREEDING_CHANCE = 0.25f
+        /** Founder request 2026-08-18: a fresh save/new world starts with 2 cows
+         * (was 1) and 10 carrots already stockpiled to feed them. */
+        const val STARTING_COWS = 2
+        const val STARTING_CARROTS = 10
+        /** Founder request 2026-08-18: 1 decoration slot to start (the standard
+         * river), +1 per map expansion — see [maxDecorations]. */
+        const val DECORATION_BASE_CAP = 1
     }
 }

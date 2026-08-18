@@ -1,8 +1,10 @@
 package com.farmmathbuilder.app.viewmodel
 
+import com.farmmathbuilder.app.data.entity.DecorationEntity
 import com.farmmathbuilder.app.data.entity.PlayerEntity
 import com.farmmathbuilder.app.data.entity.SettingsEntity
 import com.farmmathbuilder.app.domain.AnimalUiModel
+import com.farmmathbuilder.app.domain.DecorationType
 import com.farmmathbuilder.app.domain.Exercise
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.UiCell
@@ -22,11 +24,6 @@ data class FarmUiState(
     val dailyResetSnackbar: Boolean = false,
     val noSlotsSnackbar: Boolean = false,
     val expandGridSnackbar: String? = null,
-    /** True while the player is picking a new spot for the barn (see FarmViewModel
-     * startRepositioningBuilding/onRepositionTarget) — grid taps place the building
-     * instead of their normal cell action while this is true. */
-    val isRepositioningBuilding: Boolean = false,
-    val moveBuildingSnackbar: String? = null,
     /** Every owned animal (currently only cows), stage/hunger recomputed every 1s
      * tick from their own timestamps (see AnimalGrowth/CowHunger) — drives the
      * wandering herd's rendering and which ones are currently tappable/hungry. */
@@ -39,6 +36,25 @@ data class FarmUiState(
     /** Non-null right after a failed/successful cow purchase (see FarmScreen's
      * animal shop icon column and FarmViewModel.buyCow). */
     val cowShopSnackbar: String? = null,
+    /** Non-null right after one or more cows reach the end of their 20-real-minute
+     * lifespan and are removed (see AnimalLifespan/FarmRepository.removeDeadAnimals). */
+    val cowDiedSnackbar: String? = null,
+
+    // ---------- Map decorations ("accidentes geográficos" shop) ----------
+    /** Every placed decoration (currently only ever at most one RIVER — see
+     * FarmRepository.placeDecoration) — re-projected onto the current
+     * gridConfig every frame by FarmGridCanvas, so it always renders outside
+     * the fence and in the same relative spot through map expansions. */
+    val decorations: List<DecorationEntity> = emptyList(),
+    /** Non-null while the decoration picker dialog is open (tapped the terrain
+     * shop icon, haven't picked a type yet). */
+    val decorationPickerOpen: Boolean = false,
+    /** Non-null while placement mode is active: the player picked this type from
+     * the picker and must now tap a spot outside the fence to place it. */
+    val placingDecorationType: DecorationType? = null,
+    /** Non-null right after a placement attempt (success or capped-out failure
+     * — see FarmRepository.placeDecoration/maxDecorations). */
+    val decorationSnackbar: String? = null,
 
     // ---------- Dedicated "10 in a row" Challenge (see ChallengeDialog) ----------
     // Entirely separate state from activeExercise/lastAnswerCorrect above — the

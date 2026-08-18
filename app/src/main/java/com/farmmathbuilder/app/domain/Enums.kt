@@ -5,12 +5,11 @@ enum class OccupantType {
     EMPTY,
     WHEAT,
     PATH,
-    BUILDING,
     CARROT
 }
 
 /** WHEAT and CARROT are both real growable crops — they share every growth-phase,
- * harvest, cancel, and "solve to save time" rule; PATH/BUILDING/EMPTY are not. Single
+ * harvest, cancel, and "solve to save time" rule; PATH/EMPTY are not. Single
  * source of truth so a future third crop only needs one line changed here. */
 fun OccupantType.isCrop(): Boolean = this == OccupantType.WHEAT || this == OccupantType.CARROT
 
@@ -75,4 +74,24 @@ enum class AnimalType {
 enum class AnimalGrowthStage {
     CALF,
     ADULT
+}
+
+/** Player-placeable map decorations (founder request 2026-08-18: a "geographic
+ * features" shop, separate from the animal shop) — purely cosmetic, drawn
+ * outside the fenced play area. Only RIVER exists today, but the type/table are
+ * already shaped for more, same "one enum, room to grow" pattern as [AnimalType]. */
+enum class DecorationType {
+    RIVER
+}
+
+/** Which border edge a [DecorationType] is attached to — see DecorationEntity.
+ * Combined with alongFraction (0..1 position along that edge) this fully
+ * determines the decoration's placement, and is re-projected onto the grid's
+ * current cols/rows every frame (see FarmGridCanvas), so it automatically
+ * stays outside the fence and in the same relative spot as the map expands. */
+enum class DecorationSide {
+    TOP,
+    RIGHT,
+    BOTTOM,
+    LEFT
 }

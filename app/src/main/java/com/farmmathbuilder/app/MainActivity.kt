@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: FarmViewModel by viewModels {
         val db = AppDatabase.getInstance(applicationContext)
-        repository = FarmRepository(db.cellDao(), db.playerDao(), db.settingsDao(), db.animalDao())
+        repository = FarmRepository(db.cellDao(), db.playerDao(), db.settingsDao(), db.animalDao(), db.decorationDao())
         FarmViewModel.factory(repository)
     }
 
@@ -78,7 +78,11 @@ class MainActivity : ComponentActivity() {
                                 onTextSizeChange = { t -> viewModel.updateSettings { it.copy(textSize = t) } },
                                 onHighContrastToggle = { h -> viewModel.updateSettings { it.copy(highContrast = h) } },
                                 onNotificationsToggle = { n -> viewModel.updateSettings { it.copy(notificationsEnabled = n) } },
-                                onAgeBandChange = { a -> viewModel.updateAgeBand(a) }
+                                onAgeBandChange = { a -> viewModel.updateAgeBand(a) },
+                                onNewWorld = {
+                                    viewModel.resetWorld()
+                                    showSettings = false
+                                }
                             )
                         }
                         else -> {

@@ -3,6 +3,7 @@ package com.farmmathbuilder.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.farmmathbuilder.app.data.entity.DecorationEntity
 import com.farmmathbuilder.app.data.entity.PlayerEntity
 import com.farmmathbuilder.app.data.entity.SettingsEntity
 import com.farmmathbuilder.app.data.repository.FarmRepository
@@ -10,6 +11,8 @@ import com.farmmathbuilder.app.domain.AgeBand
 import com.farmmathbuilder.app.domain.AnimalGrowth
 import com.farmmathbuilder.app.domain.AnimalUiModel
 import com.farmmathbuilder.app.domain.CowHunger
+import com.farmmathbuilder.app.domain.DecorationSide
+import com.farmmathbuilder.app.domain.DecorationType
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.GridMath
 import com.farmmathbuilder.app.domain.GrowthCalculator
@@ -48,7 +51,17 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         viewModelScope.launch {
             while (true) {
                 delay(1000)
-                ticker.value = System.currentTimeMillis()
+                val now = System.currentTimeMillis()
+                ticker.value = now
+                // Cow lifespan (founder request): 20 real minutes after spawning, a
+                // cow dies and is removed — checked at the same 1s cadence as
+                // growth/hunger recompute. See AnimalLifespan/FarmRepository.removeDeadAnimals.
+                val dead = repository.removeDeadAnimals(now)
+                if (dead.isNotEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        cowDiedSnackbar = if (dead.size == 1) "🐄 One of your cows has died of old age." else "🐄 ${dead.size} cows have died of old age."
+                    )
+                }
             }
         }
     }
@@ -66,16 +79,10 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
 
     private fun observeState() {
         viewModelScope.launch {
-            combine(repository.cells, repository.player, repository.settings, repository.animals, ticker) { cells, player, settings, animals, now ->
+            val coreState = combine(repository.cells, repository.player, repository.settings, repository.animals, ticker) { cells, player, settings, animals, now ->
                 val effectiveNow = now.takeIf { it > 0 } ?: System.currentTimeMillis()
                 val gridConfig = player?.let {
-                    GridConfig(
-                        cols = it.gridCols,
-                        rows = it.gridRows,
-                        buildableRadius = it.buildableRadius,
-                        buildingAnchorCol = it.buildingAnchorCol ?: GridMath.defaultBuildingAnchorCol(it.gridCols),
-                        buildingAnchorRow = it.buildingAnchorRow ?: GridMath.defaultBuildingAnchorRow(it.gridRows)
-                    )
+                    GridConfig(cols = it.gridCols, rows = it.gridRows)
                 } ?: GridConfig.BASE
                 val uiCells = cells.map { cell ->
                     val phase = if (cell.occupantType.isCrop()) {
@@ -95,8 +102,7 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                         growthDurationMs = cell.growthDurationMs,
                         pathType = cell.pathType,
                         pathRotationDegrees = cell.pathRotationDegrees,
-                        isBuildingCell = GridMath.isBuildingCell(cell.col, cell.row, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow),
-                        isWithinBuildableRadius = GridMath.isWithinBuildableRadius(cell.col, cell.row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow)
+                        isBuildable = GridMath.isBuildable(cell.col, cell.row, gridConfig.cols, gridConfig.rows)
                     )
                 }
                 val cowModels = animals.map { animal ->
@@ -109,7 +115,14 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                 }
                 val maxCowsValue = player?.let { repository.maxCows(it) } ?: FarmRepository.COW_BASE_CAP
                 FarmSnapshot(uiCells, player, settings, gridConfig, cowModels, maxCowsValue)
-            }.collect { snapshot ->
+            }
+
+            // Chained as a second combine() (rather than folded into the 5-flow one
+            // above) since kotlinx.coroutines' typed combine() only goes up to 5
+            // differently-typed flows, and decorations is a 6th.
+            coreState.combine(repository.decorations) { snapshot, decorations ->
+                snapshot to decorations
+            }.collect { (snapshot, decorations) ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     cells = snapshot.uiCells,
@@ -117,7 +130,8 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                     settings = snapshot.settings,
                     gridConfig = snapshot.gridConfig,
                     cows = snapshot.cows,
-                    maxCows = snapshot.maxCows
+                    maxCows = snapshot.maxCows,
+                    decorations = decorations
                 )
             }
         }
@@ -126,10 +140,8 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
     // ---------- Cell interaction ----------
 
     fun onCellTapped(cellId: Int) {
-        if (_uiState.value.isRepositioningBuilding) return
         val cell = _uiState.value.cells.find { it.id == cellId } ?: return
-        if (cell.isBuildingCell) return
-        if (cell.isEmpty && !cell.isWithinBuildableRadius) return // locked cell, no-op
+        if (cell.isEmpty && !cell.isBuildable) return // locked cell, no-op
         if (cell.isMature) {
             harvest(cellId)
             return
@@ -236,43 +248,6 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(expandGridSnackbar = null)
     }
 
-    // ---------- Move barn ----------
-
-    /** Whether "move barn" can currently be offered at all — no crop (wheat or
-     * carrot) growing/mature anywhere on the map (see
-     * FarmRepository.canRepositionBuilding's doc). */
-    fun hasGrowingCropOnMap(): Boolean = _uiState.value.cells.any { it.occupantType.isCrop() }
-
-    fun startRepositioningBuilding() {
-        if (hasGrowingCropOnMap()) {
-            _uiState.value = _uiState.value.copy(
-                moveBuildingSnackbar = "Harvest or cancel all crops first to move the barn"
-            )
-            return
-        }
-        _uiState.value = _uiState.value.copy(isRepositioningBuilding = true, selectedCellId = null)
-    }
-
-    fun cancelRepositioningBuilding() {
-        _uiState.value = _uiState.value.copy(isRepositioningBuilding = false)
-    }
-
-    /** Called when the player taps a cell while in "move barn" mode: that cell
-     * becomes the new top-left anchor of the building's 2x2 footprint. */
-    fun onRepositionTarget(col: Int, row: Int) {
-        viewModelScope.launch {
-            val moved = repository.moveBuilding(col, row)
-            _uiState.value = _uiState.value.copy(
-                isRepositioningBuilding = false,
-                moveBuildingSnackbar = if (moved) null else "Can't place the barn there"
-            )
-        }
-    }
-
-    fun consumeMoveBuildingSnackbar() {
-        _uiState.value = _uiState.value.copy(moveBuildingSnackbar = null)
-    }
-
     // ---------- Cows (shop + feeding + breeding) ----------
 
     /** Tapping a cow while she's hungry (FarmGridCanvas only fires this for a
@@ -325,6 +300,53 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
 
     fun consumeCowShopSnackbar() {
         _uiState.value = _uiState.value.copy(cowShopSnackbar = null)
+    }
+
+    fun consumeCowDiedSnackbar() {
+        _uiState.value = _uiState.value.copy(cowDiedSnackbar = null)
+    }
+
+    // ---------- Map decorations ("accidentes geográficos" shop) ----------
+
+    fun openDecorationPicker() {
+        _uiState.value = _uiState.value.copy(decorationPickerOpen = true)
+    }
+
+    fun dismissDecorationPicker() {
+        _uiState.value = _uiState.value.copy(decorationPickerOpen = false)
+    }
+
+    /** Player picked a decoration type from the picker dialog — closes it and
+     * enters placement mode; the next valid tap on the grid (outside the fence,
+     * see FarmGridCanvas) places it there. */
+    fun startPlacingDecoration(type: DecorationType) {
+        _uiState.value = _uiState.value.copy(decorationPickerOpen = false, placingDecorationType = type)
+    }
+
+    fun cancelPlacingDecoration() {
+        _uiState.value = _uiState.value.copy(placingDecorationType = null)
+    }
+
+    /** Called when the player taps a valid outside-the-fence spot while in
+     * placement mode. [side]/[alongFraction] are already resolved from the raw
+     * tap by FarmGridCanvas (nearest border edge + how far along it), so this
+     * just has to persist them — see FarmRepository.placeDecoration's doc for
+     * why storing them relative (rather than an absolute col/row) is what keeps
+     * the decoration outside the fence and in the same relative spot through
+     * future map expansions. */
+    fun onDecorationPlacementTarget(side: DecorationSide, alongFraction: Float) {
+        val type = _uiState.value.placingDecorationType ?: return
+        viewModelScope.launch {
+            val placed = repository.placeDecoration(type, side, alongFraction)
+            _uiState.value = _uiState.value.copy(
+                placingDecorationType = null,
+                decorationSnackbar = if (placed) null else "Expand the map to unlock another decoration slot"
+            )
+        }
+    }
+
+    fun consumeDecorationSnackbar() {
+        _uiState.value = _uiState.value.copy(decorationSnackbar = null)
     }
 
     // ---------- Math exercise (casual single-exercise-for-a-field flow) ----------
@@ -452,6 +474,34 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
     fun updateSettings(mutator: (SettingsEntity) -> SettingsEntity) {
         viewModelScope.launch {
             repository.updateSettings(mutator)
+        }
+    }
+
+    /** Settings menu "New world" (founder request): wipes the save and starts over
+     * from a fresh grid/player/herd — see FarmRepository.resetWorld's doc for what's
+     * kept (settings) vs wiped. Also clears every piece of transient/dialog UI state
+     * that no longer makes sense against a blank world, so the next recomposition
+     * doesn't briefly show a stale popup/exercise pointing at a cell/animal that no
+     * longer exists.
+     */
+    fun resetWorld() {
+        viewModelScope.launch {
+            repository.resetWorld()
+            _uiState.value = _uiState.value.copy(
+                selectedCellId = null,
+                activeExercise = null,
+                exercisePurposeCellId = null,
+                lastAnswerCorrect = null,
+                showHarvestCelebrationForCellId = null,
+                decorationPickerOpen = false,
+                placingDecorationType = null,
+                decorationSnackbar = null,
+                activeChallengeExercise = null,
+                challengeCorrectCount = 0,
+                challengeLastAnswerCorrect = null,
+                challengeCompletedBonusFields = null,
+                challengeFailed = false
+            )
         }
     }
 

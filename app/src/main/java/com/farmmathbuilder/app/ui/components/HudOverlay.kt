@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Agriculture
@@ -17,14 +19,16 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Terrain
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.farmmathbuilder.app.data.entity.PlayerEntity
+import com.farmmathbuilder.app.domain.DecorationType
 import com.farmmathbuilder.app.ui.theme.BuildingRoof
 import com.farmmathbuilder.app.ui.theme.CardCream
 import com.farmmathbuilder.app.ui.theme.GrassGreenDark
@@ -154,19 +159,21 @@ fun FabColumn(
 }
 
 /**
- * Vertical column of animal-purchase icons, flush to the right edge of the
- * screen (founder spec: "pegados al borde derecho", vertical, icon-only — no
- * label/count on the chip itself, unlike [HudChip]). Only a cow icon exists
- * today; more animal types would each get their own icon here later, per the
- * founder's "más animales" direction. Tapping buys one at
- * [com.farmmathbuilder.app.data.repository.FarmRepository.COW_COST] wheat,
- * greyed out (same disabled language as [ExpandMapButton]) once unaffordable
- * or the herd is at its cap.
+ * Vertical column of shop icons, flush to the right edge of the screen
+ * (founder spec: "pegados al borde derecho", vertical, icon-only — no
+ * label/count on the chip itself, unlike [HudChip]). The cow icon buys an
+ * animal at [com.farmmathbuilder.app.data.repository.FarmRepository.COW_COST]
+ * wheat, greyed out (same disabled language as [ExpandMapButton]) once
+ * unaffordable or the herd is at its cap. Right below it (founder request
+ * 2026-08-18: "un segundo icono, debajo del icono de la vaca") is the map
+ * decorations ("accidentes geográficos") shop — opens [DecorationPickerDialog]
+ * to place a decoration (currently only a river) outside the fenced play area.
  */
 @Composable
 fun AnimalShopColumn(
     canBuyCow: Boolean,
     onBuyCow: () -> Unit,
+    onOpenDecorationShop: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -182,6 +189,93 @@ fun AnimalShopColumn(
             modifier = Modifier.size(48.dp).shadow(2.dp, CircleShape)
         ) {
             Text("🐄", style = MaterialTheme.typography.titleLarge)
+        }
+        FloatingActionButton(
+            onClick = onOpenDecorationShop,
+            containerColor = CardCream.copy(alpha = 0.92f),
+            contentColor = SoilBrown,
+            shape = CircleShape,
+            modifier = Modifier.size(48.dp).shadow(2.dp, CircleShape)
+        ) {
+            Icon(Icons.Filled.Terrain, contentDescription = "Map decorations")
+        }
+    }
+}
+
+/** One selectable row in [DecorationPickerDialog] — icon + label, same "flat
+ * card" language as the rest of the shop UI. */
+@Composable
+private fun DecorationOptionRow(
+    emoji: String,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(CardCream, RoundedCornerShape(12.dp))
+            .border(1.5.dp, SoilBrown.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(emoji, style = MaterialTheme.typography.headlineSmall)
+        Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = SoilBrown)
+    }
+}
+
+/** Picker for the map decorations shop (founder request 2026-08-18): lists
+ * every placeable [DecorationType] — only RIVER exists today — and starts
+ * placement mode on tap (see FarmViewModel.startPlacingDecoration). */
+@Composable
+fun DecorationPickerDialog(
+    onDismiss: () -> Unit,
+    onPick: (DecorationType) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Map decorations") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Pick a decoration to place outside your fields.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SoilBrown.copy(alpha = 0.8f)
+                )
+                DecorationOptionRow(emoji = "🏞️", label = "River") { onPick(DecorationType.RIVER) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/** Banner shown while placing a decoration: instructs the player and offers a
+ * cancel escape hatch (tapping a valid spot outside the fence on the grid
+ * itself completes the placement) — same shape as the old move-barn banner. */
+@Composable
+fun DecorationPlacementBanner(
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(CardCream, RoundedCornerShape(16.dp))
+            .border(2.dp, SoilBrown, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("Tap outside the fence to place it", color = SoilBrown, fontWeight = FontWeight.Bold)
+        FloatingActionButton(
+            onClick = onCancel,
+            containerColor = Color(0xFFBDBDBD),
+            contentColor = Color.White,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(Icons.Filled.Close, contentDescription = "Cancel decoration placement")
         }
     }
 }
@@ -201,51 +295,6 @@ fun HarvestAllButton(
         icon = { Icon(Icons.Filled.Agriculture, contentDescription = "Harvest all") },
         text = { Text("Harvest all ($matureCount)", fontWeight = FontWeight.Bold) }
     )
-}
-
-/** Enters "move barn" mode (only offered while no wheat is growing/mature anywhere —
- * disabled/greyed otherwise, same visual language as ExpandMapButton's afford check). */
-@Composable
-fun MoveBarnButton(
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    ExtendedFloatingActionButton(
-        onClick = onClick,
-        modifier = modifier,
-        containerColor = if (enabled) SoilBrown else Color(0xFFBDBDBD),
-        contentColor = Color.White,
-        icon = { Icon(Icons.Filled.Home, contentDescription = "Move barn") },
-        text = { Text("Move barn", fontWeight = FontWeight.Bold) }
-    )
-}
-
-/** Banner shown while in "move barn" mode: instructs the player and offers a cancel
- * escape hatch (tapping a valid tile on the grid itself completes the move). */
-@Composable
-fun MoveBarnBanner(
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .background(CardCream, RoundedCornerShape(16.dp))
-            .border(2.dp, SoilBrown, RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text("Tap a highlighted tile to place the barn", color = SoilBrown, fontWeight = FontWeight.Bold)
-        FloatingActionButton(
-            onClick = onCancel,
-            containerColor = Color(0xFFBDBDBD),
-            contentColor = Color.White,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(Icons.Filled.Close, contentDescription = "Cancel move barn")
-        }
-    }
 }
 
 /** Map expansion (founder request): grows the grid one ring at a cost of wheat currency. */

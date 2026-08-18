@@ -30,9 +30,12 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.farmmathbuilder.app.data.entity.DecorationEntity
 import com.farmmathbuilder.app.domain.AnimalGrowthStage
 import com.farmmathbuilder.app.domain.AnimalUiModel
 import com.farmmathbuilder.app.domain.BarnMesh
+import com.farmmathbuilder.app.domain.DecorationSide
+import com.farmmathbuilder.app.domain.DecorationType
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.GridMath
 import com.farmmathbuilder.app.domain.GrowthPhase
@@ -59,10 +62,11 @@ fun FarmGridCanvas(
     highlightedCellId: Int?,
     onCellTapped: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    isRepositioningBuilding: Boolean = false,
-    onRepositionTarget: (col: Int, row: Int) -> Unit = { _, _ -> },
     cows: List<AnimalUiModel> = emptyList(),
-    onCowTapped: (animalId: Int) -> Unit = {}
+    onCowTapped: (animalId: Int) -> Unit = {},
+    decorations: List<DecorationEntity> = emptyList(),
+    placingDecorationType: DecorationType? = null,
+    onDecorationPlacementTarget: (side: DecorationSide, alongFraction: Float) -> Unit = { _, _ -> }
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
@@ -115,13 +119,31 @@ fun FarmGridCanvas(
                     scale = newScale
                 }
             }
-            .pointerInput(cells, gridConfig, isRepositioningBuilding, cowRenders) {
+            .pointerInput(cells, gridConfig, cowRenders, placingDecorationType) {
                 detectTapGestures { tapOffset ->
                     val canvasCenter = Offset(size.width / 2f, size.height / 2f)
                     val contentPoint = (tapOffset - canvasCenter - pan) / scale + canvasCenter
                     val tileW = tileWidthDp.dp.toPx()
                     val tileH = tileHeightDp.dp.toPx()
                     val gridOriginOffset = gridOrigin(canvasCenter, tileW, tileH, gridConfig.cols, gridConfig.rows)
+
+                    // Decoration placement mode takes over the whole canvas: invert
+                    // the isometric projection to recover a floating (col, row) for
+                    // the tap (valid anywhere, including outside the grid array,
+                    // unlike the cell-by-cell hit test below), then resolve it to a
+                    // border side + fraction-along-that-side. An in-bounds tap (not
+                    // outside the fence) is silently ignored — placement mode stays
+                    // active so the player can just tap again.
+                    if (placingDecorationType != null) {
+                        val dx = contentPoint.x - gridOriginOffset.x
+                        val dy = contentPoint.y - gridOriginOffset.y
+                        val tapCol = dx / tileW + dy / tileH
+                        val tapRow = dy / tileH - dx / tileW
+                        resolveDecorationTarget(tapCol, tapRow, gridConfig.cols, gridConfig.rows)?.let { (side, fraction) ->
+                            onDecorationPlacementTarget(side, fraction)
+                        }
+                        return@detectTapGestures
+                    }
 
                     // Each cow is only tappable while hungry (otherwise purely
                     // decorative) — checked first so a tap "on her" never also
@@ -158,11 +180,7 @@ fun FarmGridCanvas(
                             break
                         }
                     }
-                    if (isRepositioningBuilding) {
-                        hitCell?.let { onRepositionTarget(it.col, it.row) }
-                    } else {
-                        hitCell?.let { onCellTapped(it.id) }
-                    }
+                    hitCell?.let { onCellTapped(it.id) }
                 }
             }
     ) {
@@ -170,22 +188,6 @@ fun FarmGridCanvas(
         val tileW = tileWidthDp.dp.toPx()
         val tileH = tileHeightDp.dp.toPx()
         val originOffset = gridOrigin(canvasCenter, tileW, tileH, gridConfig.cols, gridConfig.rows)
-        val buildingAnchorCol = gridConfig.buildingAnchorCol
-        val buildingAnchorRow = gridConfig.buildingAnchorRow
-
-        // "Move barn" placement affordance: a candidate anchor is valid if its 2x2
-        // footprint fits inside the buildable ring and every one of those 4 cells is
-        // either empty or already part of the *current* barn (tapping its own spot is
-        // a harmless no-op). Mirrors FarmRepository.isValidBuildingTarget's rule, just
-        // computed locally from the already-loaded `cells` for instant visual feedback.
-        fun isValidRepositionAnchor(col: Int, row: Int): Boolean {
-            if (!GridMath.isValidBuildingAnchor(col, row, gridConfig.cols, gridConfig.rows)) return false
-            val targets = listOf(col to row, col + 1 to row, col to row + 1, col + 1 to row + 1)
-            return targets.all { (c, r) ->
-                val target = cells.find { it.col == c && it.row == r }
-                target != null && (target.occupantType == OccupantType.EMPTY || target.isBuildingCell)
-            }
-        }
 
         // Continuous ground plane covering the entire visible canvas (unaffected by
         // scale/pan — drawn once in raw canvas coordinates), so panning/zooming never
@@ -194,24 +196,32 @@ fun FarmGridCanvas(
         // where the buildable/playable area actually ends.
         drawRect(color = Color(0xFF9CCC65), size = size)
 
-        // Decorative river + woods backdrop, top-right of the play area (founder-
-        // approved design, docs/previews/river-woods-preview.html). Anchored to
-        // grid coordinates outside the boundary fence's row=0 edge — recomputed
-        // from gridConfig.cols/rows every frame, exactly like the fence posts —
-        // so it always sits outside the buildable ring and slides outward with
-        // it as the map expands, never overlapping a playable cell. Drawn before
-        // every gameplay element (cells, barn, cow, fence) so it always renders
-        // as background, underneath them.
-        drawRiverAndWoodsBackdrop(
-            originOffset = originOffset,
-            canvasCenter = canvasCenter,
-            scale = scale,
-            pan = pan,
-            tileW = tileW,
-            tileH = tileH,
-            gridConfig = gridConfig,
-            animMs = riverAnimMs
-        )
+        // Player-placed map decorations (founder request 2026-08-18: "accidentes
+        // geográficos" shop — only RIVER exists today, drawn with the same river +
+        // woods backdrop art, docs/previews/river-woods-preview.html). Each one's
+        // position is stored relative (border side + fraction along it, see
+        // DecorationEntity's doc) and re-projected onto gridConfig.cols/rows every
+        // frame, exactly like the fence posts — so it always sits outside the
+        // buildable ring and stays in the same relative spot as the map expands,
+        // never overlapping a playable cell. Drawn before every gameplay element
+        // (cells, barn, cow, fence) so it always renders as background, underneath
+        // them.
+        for (decoration in decorations) {
+            when (decoration.type) {
+                DecorationType.RIVER -> drawRiverAndWoodsBackdrop(
+                    originOffset = originOffset,
+                    canvasCenter = canvasCenter,
+                    scale = scale,
+                    pan = pan,
+                    tileW = tileW,
+                    tileH = tileH,
+                    gridConfig = gridConfig,
+                    side = decoration.side,
+                    alongFraction = decoration.alongFraction,
+                    animMs = riverAnimMs
+                )
+            }
+        }
 
         for (cell in cells.sortedBy { it.col + it.row }) {
             val baseCx = originOffset.x + GridMath.isoX(cell.col, cell.row, tileW)
@@ -222,10 +232,6 @@ fun FarmGridCanvas(
             val h = tileH * scale
 
             val fillColor = when {
-                // A warm soil brown (rather than the old bright red-orange) reads as
-                // packed dirt around the barn's own wood/roof palette instead of a
-                // jarring "sticker" patch — part of grounding the barn visually.
-                cell.isBuildingCell -> Color(0xFF9C7B4A)
                 cell.occupantType == OccupantType.PATH -> Color(0xFFBCAAA4)
                 cell.occupantType.isCrop() -> Color(0xFFDCEDC8)
                 // Beyond the buildable radius reads as the same green ground as everywhere
@@ -247,24 +253,7 @@ fun FarmGridCanvas(
                 drawPath(diamond, color = Color(0xFFFFEE58), style = Stroke(width = 4f * scale))
             }
 
-            // "Move barn" mode: mark every cell that's a valid new anchor (top-left
-            // corner of the relocated 2x2 footprint) so the player knows where a tap
-            // will land the building, instead of discovering valid/invalid spots by
-            // trial and error.
-            if (isRepositioningBuilding && isValidRepositionAnchor(cell.col, cell.row)) {
-                drawPath(diamond, color = Color(0x8033C6FF))
-                drawPath(diamond, color = Color(0xFF1E88E5), style = Stroke(width = 2.5f * scale))
-            }
-
             when (cell.occupantType) {
-                OccupantType.BUILDING -> {
-                    // Ground diamond/border for this building cell is already drawn
-                    // above (same as every other cell). The actual building shape is
-                    // drawn once, after the whole loop finishes, so it can never be
-                    // occluded by a neighboring building cell's diamond fill — see the
-                    // z-order fix below (was: drawn here mid-loop, which caused later
-                    // cells in the 2x2 block to paint over most of it).
-                }
                 OccupantType.WHEAT -> {
                     drawWheatTile(cx, cy, w, h, cell.growthPhase, cell.growthProgress, cell.id)
                 }
@@ -275,7 +264,7 @@ fun FarmGridCanvas(
                     drawPathPiece(cx, cy, w, h, cell.pathType, cell.pathRotationDegrees)
                 }
                 OccupantType.EMPTY -> {
-                    if (cell.isWithinBuildableRadius) {
+                    if (cell.isBuildable) {
                         textPaint.textSize = 14f * scale
                         textPaint.color = android.graphics.Color.argb(90, 0, 0, 0)
                         drawContext.canvas.nativeCanvas.drawText("+", cx, cy + 5f * scale, textPaint)
@@ -285,30 +274,31 @@ fun FarmGridCanvas(
             }
         }
 
-        // Central 2x2 farm building. Position computed the same way the old
-        // inline code did, centered on the 2x2 footprint. The building itself
-        // is a real parsed/flat-shaded 3D barn mesh (precomputed once in
-        // BarnMesh, not per-frame): each triangle's normalized (tile-relative)
-        // offsets are scaled by tileW (uniformly for both axes — see BarnMesh
-        // doc for why) and the current scale, then filled in the mesh's
-        // precomputed back-to-front order. Wrapped in a lambda (rather than
-        // drawn unconditionally here) so it can be interleaved with the cow
-        // below in true depth order — see the painter's-algorithm dispatch
-        // after both lambdas.
+        // Farm Building: lives permanently outside the fenced play area, touching
+        // the fence along its bottom edge (founder request 2026-08-18: "fuera de
+        // las vallas, pero pegadas a ellas" — frees up the 2x2 of grid cells it
+        // used to occupy inside the fence, and removes "move barn" since it's no
+        // longer player-placeable). Position is derived purely from gridConfig
+        // every frame — same live-recompute pattern as the river/woods backdrop
+        // and the fence itself — so it stays centered and attached to the fence
+        // through every map expansion with no persisted anchor to migrate. Still
+        // the original real parsed/flat-shaded 3D barn.obj mesh (precomputed once
+        // in BarnMesh, not per-frame, per founder request to keep that model):
+        // each triangle's normalized (tile-relative) offsets are scaled by tileW
+        // (uniformly for both axes — see BarnMesh doc for why) and the current
+        // scale, then filled in the mesh's precomputed back-to-front order.
+        val barnCol = gridConfig.cols / 2f - 0.5f
+        val barnRow = gridConfig.rows - 0.5f + 1.2f
         val drawBarn: () -> Unit = {
-            val centerCol = buildingAnchorCol + 0.5f
-            val centerRow = buildingAnchorRow + 0.5f
-            val bBaseCx = originOffset.x + GridMath.isoX(centerCol, centerRow, tileW)
-            val bBaseCy = originOffset.y + GridMath.isoY(centerCol, centerRow, tileH)
+            val bBaseCx = originOffset.x + GridMath.isoX(barnCol, barnRow, tileW)
+            val bBaseCy = originOffset.y + GridMath.isoY(barnCol, barnRow, tileH)
             val bx = (bBaseCx - canvasCenter.x) * scale + canvasCenter.x + pan.x
             val by = (bBaseCy - canvasCenter.y) * scale + canvasCenter.y + pan.y
 
             // Soft contact shadow, ground-plane-flat (an iso-proportioned ellipse, not
-            // a screen-space circle) under the barn's floor anchor. This is most of
-            // what was making the barn read as "a photo pasted on the game": a flat-
-            // shaded mesh with a hard silhouette and no contact with the ground below
-            // it looks like a cutout sticker. A soft dark-to-transparent radial falloff
-            // anchors it to the dirt instead of floating over it.
+            // a screen-space circle) under the barn's floor anchor — grounds the flat-
+            // shaded mesh instead of it reading as a cutout sticker floating over the
+            // ground.
             val shadowRx = tileW * scale * 1.05f
             val shadowRy = tileH * scale * 0.85f
             drawOval(
@@ -345,11 +335,9 @@ fun FarmGridCanvas(
         // Decorative wandering cows: not part of `cells`, and only ever hit-tested
         // by the tap handler above while a given cow is hungry — otherwise purely
         // cosmetic. Each cow's position is driven by its own free-floating
-        // CowWanderState coroutine (rememberCowWanderState above), which already
-        // keeps it clear of the barn's footprint (see the rectangle-avoidance
-        // path planning there) — this builds one draw lambda per cow, handling
-        // the remaining "which one paints on top" question for near-barn tiles,
-        // a smaller scale for calves, and the floating hunger icon when needed.
+        // CowWanderState coroutine (rememberCowWanderState above) — this builds
+        // one draw lambda per cow, handling a smaller scale for calves and the
+        // floating hunger icon when needed.
         fun drawCowAt(cow: AnimalUiModel, state: CowWanderState): () -> Unit = {
             val cowBaseCx = originOffset.x + GridMath.isoX(state.col, state.row, tileW)
             val cowBaseCy = originOffset.y + GridMath.isoY(state.col, state.row, tileH)
@@ -402,7 +390,7 @@ fun FarmGridCanvas(
         // larger col+row is further down-screen, i.e. nearer the camera, i.e.
         // painted later.
         val depthDrawables = mutableListOf<Pair<Float, () -> Unit>>()
-        depthDrawables.add((buildingAnchorCol + buildingAnchorRow + 1f) to drawBarn)
+        depthDrawables.add((barnCol + barnRow) to drawBarn)
         for ((cow, state) in cowRenders) {
             if (state.col >= 0f) depthDrawables.add((state.col + state.row) to drawCowAt(cow, state))
         }
@@ -421,13 +409,11 @@ fun FarmGridCanvas(
         // piece that could fail to connect.
         //
         // One post per cell on the grid's own outermost ring (col/row == 0 or
-        // cols-1/rows-1), i.e. the true edge of the cols x rows array, not a
-        // Chebyshev-distance ring from the building — the building sits
-        // off-center for non-square grids (see buildingAnchorCol/Row), so a
-        // fixed-radius ring can miss whole sides. GridMath.isWithinBuildableRadius
-        // excludes this same border ring, so the fence always marks the true
-        // limit of where the player can act. Recomputed live from gridConfig so
-        // it follows map expansion automatically (no persistence needed).
+        // cols-1/rows-1), i.e. the true edge of the cols x rows array.
+        // GridMath.isBuildable excludes this same border ring, so the fence
+        // always marks the true limit of where the player can act. Recomputed
+        // live from gridConfig so it follows map expansion automatically (no
+        // persistence needed).
         //
         // Perimeter walk (top L->R, right T->B, bottom R->L, left B->T) visits
         // every border cell exactly once in boundary order, so consecutive
@@ -502,13 +488,14 @@ private class CowWanderState {
 }
 
 /**
- * Runs one cow's independent wander loop (identical wandering/barn-avoidance
- * logic every cow shares, just running once per cow id so a herd of cows all
- * wander independently) and returns its live [CowWanderState] for the Canvas
- * to read. Keyed on [cowId] so buying/breeding a new cow starts its own fresh
- * loop without disturbing any other cow, and on [gridConfig] so every cow's
- * loop restarts (and shifts its position, see below) when the map expands —
- * same behavior the single-cow version of this code had.
+ * Runs one cow's independent wander loop and returns its live [CowWanderState]
+ * for the Canvas to read. Keyed on [cowId] so buying/breeding a new cow starts
+ * its own fresh loop without disturbing any other cow, and on [gridConfig] so
+ * every cow's loop restarts (and shifts its position, see below) when the map
+ * expands — same behavior the single-cow version of this code had. No obstacle
+ * to route around any more: the Farm Building now lives entirely outside the
+ * fenced play area (see the drawBarn draw-lambda above), so a straight-line
+ * walk between any two buildable cells never needs detouring.
  */
 @Composable
 private fun rememberCowWanderState(cowId: Int, gridConfig: GridConfig): CowWanderState {
@@ -517,9 +504,9 @@ private fun rememberCowWanderState(cowId: Int, gridConfig: GridConfig): CowWande
 
     LaunchedEffect(cowId, gridConfig) {
         // expandGrid() shifts every existing cell by +1 col/+1 row to keep the
-        // building centered (see FarmRepository.expandGrid) — shift this cow's
+        // fence centered (see FarmRepository.expandGrid) — shift this cow's
         // free-floating position the same way so it doesn't visually teleport
-        // relative to the barn/fence when the map grows.
+        // relative to the fence when the map grows.
         prevGridConfig?.let { prev ->
             if (gridConfig.cols != prev.cols) {
                 val shift = (gridConfig.cols - prev.cols) / 2f
@@ -533,88 +520,10 @@ private fun rememberCowWanderState(cowId: Int, gridConfig: GridConfig): CowWande
             while (true) {
                 val col = Random.nextInt(gridConfig.cols)
                 val row = Random.nextInt(gridConfig.rows)
-                if (GridMath.isWithinBuildableRadius(col, row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow) &&
-                    !GridMath.isBuildingCell(col, row, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow)
-                ) {
+                if (GridMath.isBuildable(col, row, gridConfig.cols, gridConfig.rows)) {
                     return Offset(col.toFloat(), row.toFloat())
                 }
             }
-        }
-
-        // The barn is the only "solid" obstacle a free-floating cow can walk
-        // through: randomWanderTarget only excludes the building's own 2x2
-        // cells, but a *straight-line* walk between two valid targets on
-        // opposite sides of the barn still cuts across it (the buildable ring
-        // minus the building is a non-convex region). Model the barn as an
-        // axis-aligned rectangle in tile-space, expanded a bit past its 2x2
-        // cell footprint (+0.5 for the cell-center-to-edge half, +0.35 buffer
-        // for the mesh's roof/porch overhang and the cow sprite's own size),
-        // and route the walk around it instead of through it whenever a leg
-        // would cross it.
-        val margin = 0.5f + 0.35f
-        val rectMinCol = gridConfig.buildingAnchorCol.toFloat() - margin
-        val rectMaxCol = gridConfig.buildingAnchorCol.toFloat() + 1f + margin
-        val rectMinRow = gridConfig.buildingAnchorRow.toFloat() - margin
-        val rectMaxRow = gridConfig.buildingAnchorRow.toFloat() + 1f + margin
-
-        // Liang-Barsky segment/AABB clip test: true if segment (x0,y0)-(x1,y1)
-        // crosses or touches the rectangle's interior.
-        fun segmentHitsRect(x0: Float, y0: Float, x1: Float, y1: Float): Boolean {
-            var t0 = 0f
-            var t1 = 1f
-            val dx = x1 - x0
-            val dy = y1 - y0
-            val p = floatArrayOf(-dx, dx, -dy, dy)
-            val q = floatArrayOf(x0 - rectMinCol, rectMaxCol - x0, y0 - rectMinRow, rectMaxRow - y0)
-            for (i in 0 until 4) {
-                if (p[i] == 0f) {
-                    if (q[i] < 0f) return false
-                } else {
-                    val r = q[i] / p[i]
-                    if (p[i] < 0f) {
-                        if (r > t1) return false
-                        if (r > t0) t0 = r
-                    } else {
-                        if (r < t0) return false
-                        if (r < t1) t1 = r
-                    }
-                }
-            }
-            return true
-        }
-
-        // Builds the sequence of waypoints (ending at [end]) the cow should
-        // walk through to get from [start] to [end] without crossing the
-        // barn rectangle. A direct walk needs none; a blocked one is routed
-        // through whichever corner of the (slightly outset, so it never
-        // re-touches the rectangle) obstacle box keeps both legs clear and
-        // minimizes total distance.
-        fun planPath(start: Offset, end: Offset): List<Offset> {
-            if (!segmentHitsRect(start.x, start.y, end.x, end.y)) return listOf(end)
-            val cornerEps = 0.05f
-            val corners = listOf(
-                Offset(rectMinCol - cornerEps, rectMinRow - cornerEps),
-                Offset(rectMaxCol + cornerEps, rectMinRow - cornerEps),
-                Offset(rectMinCol - cornerEps, rectMaxRow + cornerEps),
-                Offset(rectMaxCol + cornerEps, rectMaxRow + cornerEps)
-            )
-            var best: Offset? = null
-            var bestDist = Float.POSITIVE_INFINITY
-            for (corner in corners) {
-                val leg1Clear = !segmentHitsRect(start.x, start.y, corner.x, corner.y)
-                val leg2Clear = !segmentHitsRect(corner.x, corner.y, end.x, end.y)
-                if (leg1Clear && leg2Clear) {
-                    val d = hypot(corner.x - start.x, corner.y - start.y) + hypot(end.x - corner.x, end.y - corner.y)
-                    if (d < bestDist) {
-                        bestDist = d
-                        best = corner
-                    }
-                }
-            }
-            // No single corner clears both legs (can happen if start/end are
-            // deep in a concave pocket) — falling back to a direct walk is a
-            // rare, harmless simplification rather than a full navmesh.
-            return best?.let { listOf(it, end) } ?: listOf(end)
         }
 
         if (state.col < 0f) {
@@ -634,28 +543,25 @@ private fun rememberCowWanderState(cowId: Int, gridConfig: GridConfig): CowWande
             }
 
             val target = randomWanderTarget()
-            val waypoints = planPath(Offset(state.col, state.row), target)
             val tilesPerMs = 0.5f / 1000f
 
-            for (waypoint in waypoints) {
-                val startCol = state.col
-                val startRow = state.row
-                val dCol = waypoint.x - startCol
-                val dRow = waypoint.y - startRow
-                val dist = hypot(dCol, dRow)
-                if (dist < 0.05f) continue
-                state.facingRight = dCol >= 0f
+            val startCol = state.col
+            val startRow = state.row
+            val dCol = target.x - startCol
+            val dRow = target.y - startRow
+            val dist = hypot(dCol, dRow)
+            if (dist < 0.05f) continue
+            state.facingRight = dCol >= 0f
 
-                val durationMs = dist / tilesPerMs
-                val moveStartMs = frameMs
-                while (true) {
-                    frameMs = withFrameMillis { it }
-                    state.animMs = frameMs.toFloat()
-                    val t = ((frameMs - moveStartMs) / durationMs).coerceIn(0f, 1f)
-                    state.col = startCol + dCol * t
-                    state.row = startRow + dRow * t
-                    if (t >= 1f) break
-                }
+            val durationMs = dist / tilesPerMs
+            val moveStartMs = frameMs
+            while (true) {
+                frameMs = withFrameMillis { it }
+                state.animMs = frameMs.toFloat()
+                val t = ((frameMs - moveStartMs) / durationMs).coerceIn(0f, 1f)
+                state.col = startCol + dCol * t
+                state.row = startRow + dRow * t
+                if (t >= 1f) break
             }
         }
     }
@@ -667,7 +573,7 @@ private fun rememberCowWanderState(cowId: Int, gridConfig: GridConfig): CowWande
  * ported 1:1 from that preview's `drawCowB` canvas routine: rounded 2D shapes
  * (no mesh/3D), all offsets tuned against that preview's 46px reference tile
  * width, so [unitScale] should be `(tileWidthPx * zoomScale) / 46f` — the same
- * "1 tile-width = 1 unit" convention BarnMesh triangles use. [cx]/[cy]
+ * "1 tile-width = 1 unit" convention BarnMesh triangles/the fence/the river use. [cx]/[cy]
  * is the shoulder/back anchor point (not the feet); [stride] and [bob] are the
  * walk-cycle inputs (leg-swing weight and vertical bounce), both continuous
  * functions of the anim clock so the cow keeps a subtle idle sway even while
@@ -870,15 +776,18 @@ private fun DrawScope.drawFenceRailSegment(from: Offset, to: Offset, unitScale: 
 
 /**
  * River + woods backdrop (founder-approved design, docs/previews/river-woods-preview.html):
- * a rock spring near the grid's top edge feeds a sinuous, reed-banked river
- * that curves down to the right corner and widens into a small lily-pad pool
- * tucked under the first tree of a woods cluster. Every position is derived
- * from [gridConfig] (via [riverPathGrid], in col/row grid units, not pixels)
- * and re-projected through the same origin/scale/pan transform as every other
- * element in this file, so the whole backdrop automatically slides outward
- * and stays outside the boundary fence as the map expands — no separate
- * "reposition on expand" bookkeeping needed, mirroring how the fence and the
- * wandering cow already track [gridConfig].
+ * a rock spring feeds a sinuous, reed-banked river that curves down to a
+ * corner and widens into a small lily-pad pool tucked under the first tree of
+ * a woods cluster. Every position is derived from [gridConfig] (via
+ * [riverPathGrid], in col/row grid units, not pixels) and re-projected through
+ * the same origin/scale/pan transform as every other element in this file, so
+ * the whole backdrop automatically slides outward and stays outside the
+ * boundary fence as the map expands — no separate "reposition on expand"
+ * bookkeeping needed, mirroring how the fence and the wandering cow already
+ * track [gridConfig]. [side]/[alongFraction] place it on any of the 4 border
+ * edges (founder request 2026-08-18: player-placeable map decorations, see
+ * DecorationEntity) — originally this was hardcoded to the top edge at a fixed
+ * 0.38 fraction; [riverPathGrid] now generalizes that same shape to any edge.
  */
 private fun DrawScope.drawRiverAndWoodsBackdrop(
     originOffset: Offset,
@@ -888,6 +797,8 @@ private fun DrawScope.drawRiverAndWoodsBackdrop(
     tileW: Float,
     tileH: Float,
     gridConfig: GridConfig,
+    side: DecorationSide,
+    alongFraction: Float,
     animMs: Float
 ) {
     fun toScreen(col: Float, row: Float): Offset {
@@ -899,7 +810,7 @@ private fun DrawScope.drawRiverAndWoodsBackdrop(
         )
     }
 
-    val pts = riverPathGrid(gridConfig.cols, gridConfig.rows).map { toScreen(it.x, it.y) }
+    val pts = riverPathGrid(gridConfig.cols, gridConfig.rows, side, alongFraction).map { toScreen(it.x, it.y) }
     // Preview art (docs/previews/river-woods-preview.html) was tuned against a
     // 112px reference tile width — same "1 tile-width = 1 unit" convention the
     // fence (fenceUnitScale) and cow (cowUnitScale) already use.
@@ -912,19 +823,32 @@ private fun DrawScope.drawRiverAndWoodsBackdrop(
 
 /** Grid-space (col, row) waypoints for the river's centerline, packed into an
  * [Offset] purely as a (x=col, y=row) float pair — not a screen coordinate.
- * Starts partway along the top edge, bows gently outward, and ends at the
- * grid's right corner where the woods/pool sit (see [drawRiverWoods]). Tighter
- * to the fence than an earlier pass so it reads as bordering the map rather
- * than floating off it. */
-private fun riverPathGrid(cols: Int, rows: Int): List<Offset> {
-    val startCol = cols * 0.38f
+ * Starts [alongFraction] of the way along [side]'s edge, bows gently outward,
+ * and ends at that edge's far corner where the woods/pool sit (see
+ * [drawRiverWoods]) — a fixed small perpendicular distance outside the border,
+ * tight enough to read as bordering the map rather than floating off it,
+ * regardless of which edge. Local (along-edge, perpendicular) coordinates are
+ * computed once and then mapped onto actual (col, row) per [side], so all 4
+ * edges share the exact same curve shape, just rotated/mirrored. */
+private fun riverPathGrid(cols: Int, rows: Int, side: DecorationSide, alongFraction: Float): List<Offset> {
+    val axisLen = when (side) {
+        DecorationSide.TOP, DecorationSide.BOTTOM -> cols
+        DecorationSide.LEFT, DecorationSide.RIGHT -> rows
+    }
+    val startU = alongFraction.coerceIn(0f, 1f)
     val steps = 14
     return (0..steps).map { i ->
         val t = i / steps.toFloat()
-        val col = startCol + (cols - 1 - startCol) * t
+        val u = startU + (1f - startU) * t
+        val along = u * (axisLen - 1)
         val bow = kotlin.math.sin(t * Math.PI.toFloat()) * 0.55f
-        val row = -1.25f - bow - t * 0.25f
-        Offset(col, row)
+        val perp = -1.25f - bow - t * 0.25f
+        when (side) {
+            DecorationSide.TOP -> Offset(along, perp)
+            DecorationSide.BOTTOM -> Offset(along, (rows - 1) - perp)
+            DecorationSide.LEFT -> Offset(perp, along)
+            DecorationSide.RIGHT -> Offset((cols - 1) - perp, along)
+        }
     }
 }
 
@@ -966,10 +890,10 @@ private fun offsetRibbon(points: List<Offset>, widthFn: (Float) -> Float): Pair<
     return left to right
 }
 
-/** Soft dark radial-falloff contact shadow — the same shape/gradient
- * [drawBarn] uses to ground the barn mesh on the dirt, reused here so the
- * river's rocks/pool and every tree read as sitting on the ground rather than
- * pasted over it. */
+/** Soft dark radial-falloff contact shadow — the same shape/gradient the barn
+ * draw-lambda above uses inline to ground the mesh on the dirt, reused here so
+ * the river's rocks/pool and every tree read as sitting on the ground rather
+ * than pasted over it. */
 private fun DrawScope.drawSoftGroundShadow(center: Offset, rx: Float, ry: Float) {
     if (rx <= 0f || ry <= 0f) return
     drawOval(
@@ -1210,6 +1134,39 @@ private fun DrawScope.drawRiverTree(anchor: Offset, scale: Float, palette: List<
             size = Size(scale * 8f, scale * 5.2f)
         )
     }
+}
+
+/**
+ * Resolves a floating (col, row) tap position — recovered by inverting the
+ * isometric projection, so it's valid anywhere, including well outside the
+ * cols x rows array — into a border side + fraction-along-that-side, for
+ * decoration placement (founder request 2026-08-18). Returns null if the tap
+ * landed inside the fence (i.e. isn't actually outside the buildable area),
+ * so the caller can just ignore it and let the player try again. When the tap
+ * is outside on more than one axis at once (e.g. a corner, past both a
+ * col and a row edge), the axis with the larger excursion wins — it reads as
+ * "which edge the player was clearly aiming for".
+ */
+private fun resolveDecorationTarget(col: Float, row: Float, cols: Int, rows: Int): Pair<DecorationSide, Float>? {
+    val overTop = -row
+    val overBottom = row - (rows - 1)
+    val overLeft = -col
+    val overRight = col - (cols - 1)
+
+    val best = listOf(
+        DecorationSide.TOP to overTop,
+        DecorationSide.BOTTOM to overBottom,
+        DecorationSide.LEFT to overLeft,
+        DecorationSide.RIGHT to overRight
+    ).maxByOrNull { it.second } ?: return null
+
+    if (best.second <= 0f) return null // tap landed inside the fence — not a valid placement spot
+
+    val fraction = when (best.first) {
+        DecorationSide.TOP, DecorationSide.BOTTOM -> col / (cols - 1)
+        DecorationSide.LEFT, DecorationSide.RIGHT -> row / (rows - 1)
+    }
+    return best.first to fraction.coerceIn(0f, 1f)
 }
 
 private fun gridOrigin(canvasCenter: Offset, tileW: Float, tileH: Float, cols: Int, rows: Int): Offset {
