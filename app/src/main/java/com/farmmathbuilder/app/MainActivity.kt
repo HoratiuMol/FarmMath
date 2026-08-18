@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: FarmViewModel by viewModels {
         val db = AppDatabase.getInstance(applicationContext)
-        repository = FarmRepository(db.cellDao(), db.playerDao(), db.settingsDao())
+        repository = FarmRepository(db.cellDao(), db.playerDao(), db.settingsDao(), db.animalDao())
         FarmViewModel.factory(repository)
     }
 

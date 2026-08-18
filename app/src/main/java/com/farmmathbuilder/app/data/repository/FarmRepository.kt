@@ -1,12 +1,16 @@
 package com.farmmathbuilder.app.data.repository
 
+import com.farmmathbuilder.app.data.dao.AnimalDao
 import com.farmmathbuilder.app.data.dao.CellDao
 import com.farmmathbuilder.app.data.dao.PlayerDao
 import com.farmmathbuilder.app.data.dao.SettingsDao
+import com.farmmathbuilder.app.data.entity.AnimalEntity
 import com.farmmathbuilder.app.data.entity.CellEntity
 import com.farmmathbuilder.app.data.entity.PlayerEntity
 import com.farmmathbuilder.app.data.entity.SettingsEntity
 import com.farmmathbuilder.app.domain.AgeBand
+import com.farmmathbuilder.app.domain.AnimalGrowth
+import com.farmmathbuilder.app.domain.AnimalType
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.GridMath
 import com.farmmathbuilder.app.domain.GrowthCalculator
@@ -34,12 +38,14 @@ import java.util.Calendar
 class FarmRepository(
     private val cellDao: CellDao,
     private val playerDao: PlayerDao,
-    private val settingsDao: SettingsDao
+    private val settingsDao: SettingsDao,
+    private val animalDao: AnimalDao
 ) {
 
     val cells: Flow<List<CellEntity>> = cellDao.observeAll()
     val player: Flow<PlayerEntity?> = playerDao.observe()
     val settings: Flow<SettingsEntity?> = settingsDao.observe()
+    val animals: Flow<List<AnimalEntity>> = animalDao.observeAll()
 
     /**
      * Testing aid: the player's wheat currency is floored at [TEST_MIN_WHEAT]
@@ -122,10 +128,7 @@ class FarmRepository(
             playerDao.insert(
                 PlayerEntity(
                     lastDailyResetTimestamp = System.currentTimeMillis(),
-                    wheatCurrency = TEST_MIN_WHEAT,
-                    // Cow starts "just fed" so a new save doesn't open with the
-                    // hunger icon already showing — see CowHunger.
-                    cowLastFedTimestamp = System.currentTimeMillis()
+                    wheatCurrency = TEST_MIN_WHEAT
                 )
             )
         } else if (existing.wheatCurrency < TEST_MIN_WHEAT) {
@@ -143,10 +146,28 @@ class FarmRepository(
         }
     }
 
+    /** Seeds the player's first (free) cow — every save starts owning one, same
+     * as the old single decorative cow did before animals became a real list. */
+    suspend fun ensureAnimalsInitialized() {
+        if (animalDao.count() > 0) return
+        val now = System.currentTimeMillis()
+        animalDao.insert(
+            AnimalEntity(
+                type = AnimalType.COW,
+                // Backdated so she's already an adult, not a newborn calf.
+                bornAtTimestamp = now - AnimalGrowth.CALF_GROWTH_DURATION_MS,
+                // Starts "just fed" so a new save doesn't open with the hunger
+                // icon already showing — see CowHunger.
+                lastFedTimestamp = now
+            )
+        )
+    }
+
     suspend fun initializeAll() {
         ensureGridInitialized()
         ensurePlayerInitialized()
         ensureSettingsInitialized()
+        ensureAnimalsInitialized()
     }
 
     /**
@@ -557,25 +578,79 @@ class FarmRepository(
         settingsDao.update(mutator(s))
     }
 
-    /** Feeding the wandering cow costs 1 harvested carrot (her entire purpose,
-     * per founder request) — consumes it from [PlayerEntity.carrotInventory] and
-     * resets her fed timestamp. Only meaningful while she's hungry (enforced by
-     * the tap hit-test in FarmGridCanvas, not re-checked here since there's no
-     * penalty for a redundant feed), but always requires the carrot regardless.
-     * Returns false (no state change) when the player has none to feed her. */
-    suspend fun feedCow(): Boolean {
+    // ---------- Animals (cows) ----------
+
+    /** Founder request: population cap grows with the map — 5 base slots, +5 per
+     * expansion (gridExpansionLevel is already 0-indexed, incrementing once per
+     * expandGrid() call), so a fresh save caps at 5 and each expansion adds 5 more. */
+    fun maxCows(p: PlayerEntity): Int = COW_BASE_CAP + COW_CAP_PER_EXPANSION * p.gridExpansionLevel
+
+    /** Buys one adult cow for [COW_COST] wheat, blocked while short on wheat or
+     * already at [maxCows]. Bred calves (see [feedAnimal]) count toward the same
+     * cap, so this also fails once breeding alone has filled the pen. */
+    suspend fun buyCow(): Boolean {
         val p = playerDao.get() ?: return false
-        if (p.carrotInventory <= 0) return false
-        updatePlayer(
-            p.copy(
-                cowLastFedTimestamp = System.currentTimeMillis(),
-                carrotInventory = p.carrotInventory - 1
+        if (p.wheatCurrency < COW_COST) return false
+        if (animalDao.count() >= maxCows(p)) return false
+
+        val now = System.currentTimeMillis()
+        animalDao.insert(
+            AnimalEntity(
+                type = AnimalType.COW,
+                bornAtTimestamp = now - AnimalGrowth.CALF_GROWTH_DURATION_MS,
+                lastFedTimestamp = now
             )
         )
+        updatePlayer(p.copy(wheatCurrency = p.wheatCurrency - COW_COST))
         return true
     }
 
+    /** Feeding any animal costs 1 harvested carrot (her entire purpose, per
+     * founder request) and resets its own fed timestamp — replaces the old
+     * single-cow [PlayerEntity.cowLastFedTimestamp] now that there's a list.
+     * Only meaningful while an animal is hungry (enforced by the tap hit-test
+     * in FarmGridCanvas, not re-checked here since there's no penalty for a
+     * redundant feed), but always requires the carrot regardless.
+     *
+     * Breeding (founder request): every 2nd feed action — any animal, tracked
+     * by [PlayerEntity.cowFeedsSinceBreedingRoll] — rolls a [COW_BREEDING_CHANCE]
+     * chance to spawn a new calf, as long as the herd is under [maxCows].
+     */
+    suspend fun feedAnimal(animalId: Int): CowFeedResult {
+        val p = playerDao.get() ?: return CowFeedResult(fed = false, calfBorn = false)
+        if (p.carrotInventory <= 0) return CowFeedResult(fed = false, calfBorn = false)
+        val animal = animalDao.getById(animalId) ?: return CowFeedResult(fed = false, calfBorn = false)
+
+        val now = System.currentTimeMillis()
+        animalDao.update(animal.copy(lastFedTimestamp = now))
+
+        val feedCount = p.cowFeedsSinceBreedingRoll + 1
+        var calfBorn = false
+        var nextFeedCount = feedCount
+        if (feedCount >= 2) {
+            nextFeedCount = 0
+            if (animalDao.count() < maxCows(p) && Random.nextFloat() < COW_BREEDING_CHANCE) {
+                animalDao.insert(AnimalEntity(type = AnimalType.COW, bornAtTimestamp = now, lastFedTimestamp = now))
+                calfBorn = true
+            }
+        }
+
+        updatePlayer(
+            p.copy(
+                carrotInventory = p.carrotInventory - 1,
+                cowFeedsSinceBreedingRoll = nextFeedCount
+            )
+        )
+        return CowFeedResult(fed = true, calfBorn = calfBorn)
+    }
+
     suspend fun currentPlayer(): PlayerEntity? = player.first()
+
+    /** [fed]: whether the carrot was spent and the animal's hunger reset (false
+     * only when out of carrots or the animal id no longer exists). [calfBorn]:
+     * whether this feed happened to be the 2nd-in-a-row breeding roll and it
+     * succeeded — lets the ViewModel surface a "a calf was born!" moment. */
+    data class CowFeedResult(val fed: Boolean, val calfBorn: Boolean)
 
     companion object {
         const val TEST_MIN_WHEAT = 100
@@ -585,5 +660,11 @@ class FarmRepository(
         const val EXERCISE_STREAK_CHALLENGE_LENGTH = 10
         const val CHALLENGE_BONUS_MIN = 5
         const val CHALLENGE_BONUS_MAX = 10
+        /** Founder request: a cow costs 20 wheat. */
+        const val COW_COST = 20
+        const val COW_BASE_CAP = 5
+        const val COW_CAP_PER_EXPANSION = 5
+        /** Founder request: 25% chance per breeding roll (every 2nd feed). */
+        const val COW_BREEDING_CHANCE = 0.25f
     }
 }

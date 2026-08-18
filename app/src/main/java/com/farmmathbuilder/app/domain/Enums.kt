@@ -62,3 +62,17 @@ enum class PathType {
     CORNER,
     T_JUNCTION
 }
+
+/** Owned-animal species — only COW exists today, but the field/table is
+ * already shaped for more (see AnimalEntity), per the founder's "más
+ * animales" direction. */
+enum class AnimalType {
+    COW
+}
+
+/** Derived (never persisted) from an animal's bornAtTimestamp — see
+ * [AnimalGrowth]. Mirrors how [GrowthPhase] is derived for crops. */
+enum class AnimalGrowthStage {
+    CALF,
+    ADULT
+}

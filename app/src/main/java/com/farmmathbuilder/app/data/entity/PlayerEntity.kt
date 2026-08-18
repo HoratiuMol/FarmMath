@@ -31,12 +31,12 @@ data class PlayerEntity(
     /** Wheat-only harvest count — carrot's unlock gate specifically watches this,
      * not [fieldsCompletedTotal] (which mixes in carrot harvests once unlocked). */
     val wheatHarvestedTotal: Int = 0,
-    /** Timestamp-based like every other timer in this app (GrowthCalculator,
-     * daily reset) — never a decrementing counter, so it survives app kill.
-     * See [com.farmmathbuilder.app.domain.CowHunger]. */
-    val cowLastFedTimestamp: Long = 0L,
     /** Harvested-carrot stockpile: carrot's whole purpose (unlike wheat, which
-     * pays wheatCurrency), consumed 1-at-a-time to feed the cow. See
-     * FarmRepository.harvest/feedCow. */
-    val carrotInventory: Int = 0
+     * pays wheatCurrency), consumed 1-at-a-time to feed an animal. See
+     * FarmRepository.harvest/feedAnimal. */
+    val carrotInventory: Int = 0,
+    /** Counts feed actions (any animal) since the last breeding roll — every
+     * 2nd feed rolls one breeding check and resets to 0. See
+     * FarmRepository.feedAnimal / the founder's "al alimentar dos vacas" rule. */
+    val cowFeedsSinceBreedingRoll: Int = 0
 )

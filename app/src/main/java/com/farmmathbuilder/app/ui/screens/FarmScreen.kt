@@ -22,6 +22,7 @@ import com.farmmathbuilder.app.audio.SoundManager
 import com.farmmathbuilder.app.data.repository.FarmRepository
 import com.farmmathbuilder.app.domain.isCrop
 import com.farmmathbuilder.app.domain.SlotAvailability
+import com.farmmathbuilder.app.ui.components.AnimalShopColumn
 import com.farmmathbuilder.app.ui.components.CellActionDialog
 import com.farmmathbuilder.app.ui.components.ChallengeDialog
 import com.farmmathbuilder.app.ui.components.ConfettiOverlay
@@ -75,6 +76,12 @@ fun FarmScreen(
             viewModel.consumeCowFeedSnackbar()
         }
     }
+    LaunchedEffect(uiState.cowShopSnackbar) {
+        uiState.cowShopSnackbar?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeCowShopSnackbar()
+        }
+    }
     // Fires for both a single harvest and "harvest all" — both set this same field
     // on success, so one hook covers both entry points.
     LaunchedEffect(uiState.showHarvestCelebrationForCellId) {
@@ -95,8 +102,8 @@ fun FarmScreen(
                 modifier = Modifier.fillMaxSize(),
                 isRepositioningBuilding = uiState.isRepositioningBuilding,
                 onRepositionTarget = { col, row -> viewModel.onRepositionTarget(col, row) },
-                isCowHungry = uiState.isCowHungry,
-                onCowTapped = { viewModel.feedCow() }
+                cows = uiState.cows,
+                onCowTapped = { animalId -> viewModel.feedCow(animalId) }
             )
 
             val matureCount = uiState.cells.count { it.isMature }
@@ -114,6 +121,15 @@ fun FarmScreen(
                     )
                 }
             }
+
+            AnimalShopColumn(
+                canBuyCow = viewModel.canBuyCow(),
+                onBuyCow = {
+                    SoundManager.playSfx(SoundManager.Sounds.CLICK)
+                    viewModel.buyCow()
+                },
+                modifier = Modifier.align(Alignment.TopEnd)
+            )
 
             FabColumn(
                 onChallengeClick = {

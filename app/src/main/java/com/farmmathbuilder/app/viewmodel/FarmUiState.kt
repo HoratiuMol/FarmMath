@@ -2,6 +2,7 @@ package com.farmmathbuilder.app.viewmodel
 
 import com.farmmathbuilder.app.data.entity.PlayerEntity
 import com.farmmathbuilder.app.data.entity.SettingsEntity
+import com.farmmathbuilder.app.domain.AnimalUiModel
 import com.farmmathbuilder.app.domain.Exercise
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.UiCell
@@ -26,12 +27,18 @@ data class FarmUiState(
      * instead of their normal cell action while this is true. */
     val isRepositioningBuilding: Boolean = false,
     val moveBuildingSnackbar: String? = null,
-    /** Recomputed every 1s tick from player.cowLastFedTimestamp (see CowHunger) —
-     * drives the floating hunger icon and whether the cow is tappable at all. */
-    val isCowHungry: Boolean = false,
-    /** Non-null right after tapping the hungry cow with zero carrotInventory —
-     * feeding costs 1 carrot, see FarmRepository.feedCow. */
+    /** Every owned animal (currently only cows), stage/hunger recomputed every 1s
+     * tick from their own timestamps (see AnimalGrowth/CowHunger) — drives the
+     * wandering herd's rendering and which ones are currently tappable/hungry. */
+    val cows: List<AnimalUiModel> = emptyList(),
+    /** Current population cap (FarmRepository.maxCows) — 5 base, +5 per map expansion. */
+    val maxCows: Int = 5,
+    /** Non-null right after tapping a hungry cow with zero carrotInventory —
+     * feeding costs 1 carrot, see FarmRepository.feedAnimal. */
     val cowFeedSnackbar: String? = null,
+    /** Non-null right after a failed/successful cow purchase (see FarmScreen's
+     * animal shop icon column and FarmViewModel.buyCow). */
+    val cowShopSnackbar: String? = null,
 
     // ---------- Dedicated "10 in a row" Challenge (see ChallengeDialog) ----------
     // Entirely separate state from activeExercise/lastAnswerCorrect above — the

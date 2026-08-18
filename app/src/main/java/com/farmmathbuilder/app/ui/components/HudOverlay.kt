@@ -153,6 +153,39 @@ fun FabColumn(
     }
 }
 
+/**
+ * Vertical column of animal-purchase icons, flush to the right edge of the
+ * screen (founder spec: "pegados al borde derecho", vertical, icon-only — no
+ * label/count on the chip itself, unlike [HudChip]). Only a cow icon exists
+ * today; more animal types would each get their own icon here later, per the
+ * founder's "más animales" direction. Tapping buys one at
+ * [com.farmmathbuilder.app.data.repository.FarmRepository.COW_COST] wheat,
+ * greyed out (same disabled language as [ExpandMapButton]) once unaffordable
+ * or the herd is at its cap.
+ */
+@Composable
+fun AnimalShopColumn(
+    canBuyCow: Boolean,
+    onBuyCow: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(top = 10.dp, bottom = 10.dp, end = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        FloatingActionButton(
+            onClick = onBuyCow,
+            containerColor = if (canBuyCow) CardCream.copy(alpha = 0.92f) else Color(0xFFBDBDBD),
+            contentColor = SoilBrown,
+            shape = CircleShape,
+            modifier = Modifier.size(48.dp).shadow(2.dp, CircleShape)
+        ) {
+            Text("🐄", style = MaterialTheme.typography.titleLarge)
+        }
+    }
+}
+
 /** Harvests every currently-mature cell at once; only shown when there's at least one ready. */
 @Composable
 fun HarvestAllButton(

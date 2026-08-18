@@ -2,11 +2,17 @@ package com.farmmathbuilder.app.data.db
 
 import androidx.room.TypeConverter
 import com.farmmathbuilder.app.domain.AgeBand
+import com.farmmathbuilder.app.domain.AnimalType
 import com.farmmathbuilder.app.domain.OccupantType
 import com.farmmathbuilder.app.domain.PathType
 import com.farmmathbuilder.app.domain.TextSizeOption
 
 class Converters {
+    @TypeConverter
+    fun fromAnimalType(value: AnimalType): String = value.name
+
+    @TypeConverter
+    fun toAnimalType(value: String): AnimalType = AnimalType.valueOf(value)
     @TypeConverter
     fun fromOccupantType(value: OccupantType): String = value.name
 

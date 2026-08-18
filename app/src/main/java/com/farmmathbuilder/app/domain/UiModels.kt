@@ -26,3 +26,12 @@ enum class SlotAvailability {
     EXTRA_SLOT_AVAILABLE,
     NONE_AVAILABLE
 }
+
+/** UI-facing animal state: raw persisted [AnimalEntity] fields + growth stage/
+ * hunger derived "now", same shape as [UiCell] for crops. */
+data class AnimalUiModel(
+    val id: Int,
+    val type: AnimalType,
+    val stage: AnimalGrowthStage,
+    val isHungry: Boolean
+)

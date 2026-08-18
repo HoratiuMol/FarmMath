@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,8 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.farmmathbuilder.app.domain.AnimalGrowthStage
+import com.farmmathbuilder.app.domain.AnimalUiModel
 import com.farmmathbuilder.app.domain.BarnMesh
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.GridMath
@@ -58,8 +61,8 @@ fun FarmGridCanvas(
     modifier: Modifier = Modifier,
     isRepositioningBuilding: Boolean = false,
     onRepositionTarget: (col: Int, row: Int) -> Unit = { _, _ -> },
-    isCowHungry: Boolean = false,
-    onCowTapped: () -> Unit = {}
+    cows: List<AnimalUiModel> = emptyList(),
+    onCowTapped: (animalId: Int) -> Unit = {}
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
@@ -70,14 +73,14 @@ fun FarmGridCanvas(
     val context = LocalContext.current
     val barnTriangles = remember { BarnMesh.load(context) }
 
-    // Decorative wandering cow (not tappable, no gameplay effect): a free-floating
-    // col/row position animated by its own coroutine, independent of the cell grid.
-    // -1f is an "uninitialized" sentinel (valid col/row are always >= 0).
-    var cowCol by remember { mutableFloatStateOf(-1f) }
-    var cowRow by remember { mutableFloatStateOf(-1f) }
-    var cowFacingRight by remember { mutableStateOf(true) }
-    var cowAnimMs by remember { mutableFloatStateOf(0f) }
-    var prevGridConfigForCow by remember { mutableStateOf<GridConfig?>(null) }
+    // One independent wandering state per owned cow (see CowWanderState/
+    // rememberCowWanderState below) — each cow gets its own free-floating
+    // col/row position animated by its own coroutine, keyed by animal id so
+    // buying/breeding a new cow starts a fresh wander loop without disturbing
+    // any existing cow's position.
+    val cowRenders: List<Pair<AnimalUiModel, CowWanderState>> = cows.map { cow ->
+        key(cow.id) { cow to rememberCowWanderState(cow.id, gridConfig) }
+    }
 
     // Free-running clock for the river's water animation (highlight glints,
     // sparkles, drifting spring mist) — independent of the cow's own clock
@@ -86,151 +89,6 @@ fun FarmGridCanvas(
     LaunchedEffect(Unit) {
         while (true) {
             riverAnimMs = withFrameMillis { it }.toFloat()
-        }
-    }
-
-    LaunchedEffect(gridConfig) {
-        // expandGrid() shifts every existing cell by +1 col/+1 row to keep the
-        // building centered (see FarmRepository.expandGrid) — shift the cow's
-        // free-floating position the same way so it doesn't visually teleport
-        // relative to the barn/fence when the map grows.
-        prevGridConfigForCow?.let { prev ->
-            if (gridConfig.cols != prev.cols) {
-                val shift = (gridConfig.cols - prev.cols) / 2f
-                cowCol += shift
-                cowRow += shift
-            }
-        }
-        prevGridConfigForCow = gridConfig
-
-        fun randomWanderTarget(): Offset {
-            while (true) {
-                val col = Random.nextInt(gridConfig.cols)
-                val row = Random.nextInt(gridConfig.rows)
-                if (GridMath.isWithinBuildableRadius(col, row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow) &&
-                    !GridMath.isBuildingCell(col, row, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow)
-                ) {
-                    return Offset(col.toFloat(), row.toFloat())
-                }
-            }
-        }
-
-        // The barn is the only "solid" obstacle the free-floating cow can walk
-        // through: randomWanderTarget only excludes the building's own 2x2
-        // cells, but a *straight-line* walk between two valid targets on
-        // opposite sides of the barn still cuts across it (the buildable ring
-        // minus the building is a non-convex region). Model the barn as an
-        // axis-aligned rectangle in tile-space, expanded a bit past its 2x2
-        // cell footprint (+0.5 for the cell-center-to-edge half, +0.35 buffer
-        // for the mesh's roof/porch overhang and the cow sprite's own size),
-        // and route the walk around it instead of through it whenever a leg
-        // would cross it.
-        val margin = 0.5f + 0.35f
-        val rectMinCol = gridConfig.buildingAnchorCol.toFloat() - margin
-        val rectMaxCol = gridConfig.buildingAnchorCol.toFloat() + 1f + margin
-        val rectMinRow = gridConfig.buildingAnchorRow.toFloat() - margin
-        val rectMaxRow = gridConfig.buildingAnchorRow.toFloat() + 1f + margin
-
-        // Liang-Barsky segment/AABB clip test: true if segment (x0,y0)-(x1,y1)
-        // crosses or touches the rectangle's interior.
-        fun segmentHitsRect(x0: Float, y0: Float, x1: Float, y1: Float): Boolean {
-            var t0 = 0f
-            var t1 = 1f
-            val dx = x1 - x0
-            val dy = y1 - y0
-            val p = floatArrayOf(-dx, dx, -dy, dy)
-            val q = floatArrayOf(x0 - rectMinCol, rectMaxCol - x0, y0 - rectMinRow, rectMaxRow - y0)
-            for (i in 0 until 4) {
-                if (p[i] == 0f) {
-                    if (q[i] < 0f) return false
-                } else {
-                    val r = q[i] / p[i]
-                    if (p[i] < 0f) {
-                        if (r > t1) return false
-                        if (r > t0) t0 = r
-                    } else {
-                        if (r < t0) return false
-                        if (r < t1) t1 = r
-                    }
-                }
-            }
-            return true
-        }
-
-        // Builds the sequence of waypoints (ending at [end]) the cow should
-        // walk through to get from [start] to [end] without crossing the
-        // barn rectangle. A direct walk needs none; a blocked one is routed
-        // through whichever corner of the (slightly outset, so it never
-        // re-touches the rectangle) obstacle box keeps both legs clear and
-        // minimizes total distance.
-        fun planPath(start: Offset, end: Offset): List<Offset> {
-            if (!segmentHitsRect(start.x, start.y, end.x, end.y)) return listOf(end)
-            val cornerEps = 0.05f
-            val corners = listOf(
-                Offset(rectMinCol - cornerEps, rectMinRow - cornerEps),
-                Offset(rectMaxCol + cornerEps, rectMinRow - cornerEps),
-                Offset(rectMinCol - cornerEps, rectMaxRow + cornerEps),
-                Offset(rectMaxCol + cornerEps, rectMaxRow + cornerEps)
-            )
-            var best: Offset? = null
-            var bestDist = Float.POSITIVE_INFINITY
-            for (corner in corners) {
-                val leg1Clear = !segmentHitsRect(start.x, start.y, corner.x, corner.y)
-                val leg2Clear = !segmentHitsRect(corner.x, corner.y, end.x, end.y)
-                if (leg1Clear && leg2Clear) {
-                    val d = hypot(corner.x - start.x, corner.y - start.y) + hypot(end.x - corner.x, end.y - corner.y)
-                    if (d < bestDist) {
-                        bestDist = d
-                        best = corner
-                    }
-                }
-            }
-            // No single corner clears both legs (can happen if start/end are
-            // deep in a concave pocket) — falling back to a direct walk is a
-            // rare, harmless simplification rather than a full navmesh.
-            return best?.let { listOf(it, end) } ?: listOf(end)
-        }
-
-        if (cowCol < 0f) {
-            val start = randomWanderTarget()
-            cowCol = start.x
-            cowRow = start.y
-        }
-
-        while (true) {
-            // "Graze" pause between walks, ticking the anim clock so the tail/legs
-            // keep a subtle idle sway instead of freezing.
-            var frameMs = withFrameMillis { it }
-            val pauseUntilMs = frameMs + Random.nextInt(800, 2400)
-            while (frameMs < pauseUntilMs) {
-                cowAnimMs = frameMs.toFloat()
-                frameMs = withFrameMillis { it }
-            }
-
-            val target = randomWanderTarget()
-            val waypoints = planPath(Offset(cowCol, cowRow), target)
-            val tilesPerMs = 0.5f / 1000f
-
-            for (waypoint in waypoints) {
-                val startCol = cowCol
-                val startRow = cowRow
-                val dCol = waypoint.x - startCol
-                val dRow = waypoint.y - startRow
-                val dist = hypot(dCol, dRow)
-                if (dist < 0.05f) continue
-                cowFacingRight = dCol >= 0f
-
-                val durationMs = dist / tilesPerMs
-                val moveStartMs = frameMs
-                while (true) {
-                    frameMs = withFrameMillis { it }
-                    cowAnimMs = frameMs.toFloat()
-                    val t = ((frameMs - moveStartMs) / durationMs).coerceIn(0f, 1f)
-                    cowCol = startCol + dCol * t
-                    cowRow = startRow + dRow * t
-                    if (t >= 1f) break
-                }
-            }
         }
     }
 
@@ -257,7 +115,7 @@ fun FarmGridCanvas(
                     scale = newScale
                 }
             }
-            .pointerInput(cells, gridConfig, isRepositioningBuilding, isCowHungry) {
+            .pointerInput(cells, gridConfig, isRepositioningBuilding, cowRenders) {
                 detectTapGestures { tapOffset ->
                     val canvasCenter = Offset(size.width / 2f, size.height / 2f)
                     val contentPoint = (tapOffset - canvasCenter - pan) / scale + canvasCenter
@@ -265,23 +123,27 @@ fun FarmGridCanvas(
                     val tileH = tileHeightDp.dp.toPx()
                     val gridOriginOffset = gridOrigin(canvasCenter, tileW, tileH, gridConfig.cols, gridConfig.rows)
 
-                    // The cow is only tappable while hungry (otherwise purely
-                    // decorative, per its original design) — checked first so a
-                    // tap "on her" never also falls through to the cell beneath
-                    // her feet. Hit target is a generous circle around her
-                    // visual center (shifted up from her feet, matching the
-                    // -18*unitScale draw offset below), not her exact silhouette.
-                    val cowHit = isCowHungry && cowCol >= 0f && run {
-                        val cowBaseCx = gridOriginOffset.x + GridMath.isoX(cowCol, cowRow, tileW)
-                        val cowBaseCy = gridOriginOffset.y + GridMath.isoY(cowCol, cowRow, tileH)
-                        val dx = contentPoint.x - cowBaseCx
-                        val dy = contentPoint.y - (cowBaseCy - tileH * 0.3f)
-                        val hitRadius = tileW * 0.55f
-                        dx * dx + dy * dy <= hitRadius * hitRadius
+                    // Each cow is only tappable while hungry (otherwise purely
+                    // decorative) — checked first so a tap "on her" never also
+                    // falls through to the cell beneath her feet. Hit target is a
+                    // generous circle around her visual center (shifted up from
+                    // her feet, matching the -18*unitScale draw offset below),
+                    // not her exact silhouette. Later cows in the list win ties
+                    // (matches draw order, back-to-front isn't relevant here
+                    // since hit circles rarely overlap).
+                    val tappedCow = cowRenders.lastOrNull { (cow, state) ->
+                        cow.isHungry && state.col >= 0f && run {
+                            val cowBaseCx = gridOriginOffset.x + GridMath.isoX(state.col, state.row, tileW)
+                            val cowBaseCy = gridOriginOffset.y + GridMath.isoY(state.col, state.row, tileH)
+                            val dx = contentPoint.x - cowBaseCx
+                            val dy = contentPoint.y - (cowBaseCy - tileH * 0.3f)
+                            val hitRadius = tileW * 0.55f
+                            dx * dx + dy * dy <= hitRadius * hitRadius
+                        }
                     }
 
-                    if (cowHit) {
-                        onCowTapped()
+                    if (tappedCow != null) {
+                        onCowTapped(tappedCow.first.id)
                         return@detectTapGestures
                     }
 
@@ -480,62 +342,70 @@ fun FarmGridCanvas(
             }
         }
 
-        // Decorative wandering cow: not part of `cells`, and only ever hit-tested
-        // by the tap handler above while she's hungry (isCowHungry) — otherwise
-        // purely cosmetic. Position is driven by the free-floating cowCol/cowRow
-        // coroutine above, which already keeps it clear of the barn's footprint
-        // (see the rectangle-avoidance path planning there) — this lambda only
-        // handles the remaining "which one paints on top" question for near-barn
-        // tiles, plus the floating hunger icon when she needs feeding.
-        val drawCow: () -> Unit = {
-            val cowBaseCx = originOffset.x + GridMath.isoX(cowCol, cowRow, tileW)
-            val cowBaseCy = originOffset.y + GridMath.isoY(cowCol, cowRow, tileH)
+        // Decorative wandering cows: not part of `cells`, and only ever hit-tested
+        // by the tap handler above while a given cow is hungry — otherwise purely
+        // cosmetic. Each cow's position is driven by its own free-floating
+        // CowWanderState coroutine (rememberCowWanderState above), which already
+        // keeps it clear of the barn's footprint (see the rectangle-avoidance
+        // path planning there) — this builds one draw lambda per cow, handling
+        // the remaining "which one paints on top" question for near-barn tiles,
+        // a smaller scale for calves, and the floating hunger icon when needed.
+        fun drawCowAt(cow: AnimalUiModel, state: CowWanderState): () -> Unit = {
+            val cowBaseCx = originOffset.x + GridMath.isoX(state.col, state.row, tileW)
+            val cowBaseCy = originOffset.y + GridMath.isoY(state.col, state.row, tileH)
             val ccx = (cowBaseCx - canvasCenter.x) * scale + canvasCenter.x + pan.x
             val ccy = (cowBaseCy - canvasCenter.y) * scale + canvasCenter.y + pan.y
-            val walkPhase = cowAnimMs / 140f
+            val walkPhase = state.animMs / 140f
             val stride = kotlin.math.sin(walkPhase)
             val bob = kotlin.math.abs(stride) * 3f
             // The cow silhouette in drawWanderingCow spans ~77 units wide at its
             // 46px reference tile (its horns/tail overshoot the body's core box),
             // so dividing by 46 (1 tile-width = 1 unit) rendered it ~1.7x a cell.
             // Dividing by 77 makes it match one cell; doubling that (154) makes
-            // the cow half a cell wide.
-            val cowUnitScale = (tileW * scale) / 154f
+            // the cow half a cell wide. A calf (no separate art yet — see
+            // founder plan) reuses the same silhouette at a smaller scale, the
+            // same "growth phase via scale" shortcut the river/woods preview's
+            // trees use for now.
+            val calfFactor = if (cow.stage == AnimalGrowthStage.CALF) 0.62f else 1f
+            val cowUnitScale = (tileW * scale) / 154f * calfFactor
             val cowAnchorCx = ccx
             val cowAnchorCy = ccy - 18f * cowUnitScale
             drawWanderingCow(
                 cx = cowAnchorCx,
                 cy = cowAnchorCy,
                 unitScale = cowUnitScale,
-                facingRight = cowFacingRight,
+                facingRight = state.facingRight,
                 stride = stride,
                 bob = bob
             )
-            if (isCowHungry) {
+            if (cow.isHungry) {
                 drawCowHungerIcon(
                     cx = cowAnchorCx,
                     cy = cowAnchorCy,
                     unitScale = cowUnitScale,
-                    facingRight = cowFacingRight,
-                    animMs = cowAnimMs
+                    facingRight = state.facingRight,
+                    animMs = state.animMs
                 )
             }
         }
 
         // True painter's-algorithm ordering across *every* depth-sorted object in
-        // the scene — barn, cow, and each individual fence segment — collected
-        // into one (depth, drawAction) list and painted back-to-front. This
-        // replaces an earlier two-step approach (barn-vs-cow dispatch, then the
-        // fence always painted last over both) that broke down for the fence's
-        // far edges: a segment on the row=0/col=0 side sits at a *smaller*
-        // col+row than the barn and should render behind it, but "always last"
-        // painted it over the barn's roof regardless (founder screenshot: the
-        // back fence line cutting across the roof peak instead of disappearing
-        // behind it). Depth convention matches GridMath.isoY: larger col+row is
-        // further down-screen, i.e. nearer the camera, i.e. painted later.
+        // the scene — barn, every cow, and each individual fence segment —
+        // collected into one (depth, drawAction) list and painted back-to-front.
+        // This replaces an earlier two-step approach (barn-vs-cow dispatch, then
+        // the fence always painted last over both) that broke down for the
+        // fence's far edges: a segment on the row=0/col=0 side sits at a
+        // *smaller* col+row than the barn and should render behind it, but
+        // "always last" painted it over the barn's roof regardless (founder
+        // screenshot: the back fence line cutting across the roof peak instead
+        // of disappearing behind it). Depth convention matches GridMath.isoY:
+        // larger col+row is further down-screen, i.e. nearer the camera, i.e.
+        // painted later.
         val depthDrawables = mutableListOf<Pair<Float, () -> Unit>>()
         depthDrawables.add((buildingAnchorCol + buildingAnchorRow + 1f) to drawBarn)
-        if (cowCol >= 0f) depthDrawables.add((cowCol + cowRow) to drawCow)
+        for ((cow, state) in cowRenders) {
+            if (state.col >= 0f) depthDrawables.add((state.col + state.row) to drawCowAt(cow, state))
+        }
 
         // Decorative fence lining the buildable-area boundary: flat 2D posts +
         // a continuous rail, replacing the earlier fence.fbx-based 3D mesh
@@ -617,6 +487,179 @@ fun FarmGridCanvas(
 
         for ((_, draw) in depthDrawables.sortedBy { it.first }) draw()
     }
+}
+
+/** One cow's free-floating wander position/animation, mutated frame-by-frame by
+ * its own coroutine (see [rememberCowWanderState]) and read every draw frame by
+ * [FarmGridCanvas]'s Canvas — plain compose-state-backed properties (not a data
+ * class) so mutating one field doesn't require rebuilding the whole object.
+ * -1f col/row is the "uninitialized" sentinel (valid col/row are always >= 0). */
+private class CowWanderState {
+    var col by mutableFloatStateOf(-1f)
+    var row by mutableFloatStateOf(-1f)
+    var facingRight by mutableStateOf(true)
+    var animMs by mutableFloatStateOf(0f)
+}
+
+/**
+ * Runs one cow's independent wander loop (identical wandering/barn-avoidance
+ * logic every cow shares, just running once per cow id so a herd of cows all
+ * wander independently) and returns its live [CowWanderState] for the Canvas
+ * to read. Keyed on [cowId] so buying/breeding a new cow starts its own fresh
+ * loop without disturbing any other cow, and on [gridConfig] so every cow's
+ * loop restarts (and shifts its position, see below) when the map expands —
+ * same behavior the single-cow version of this code had.
+ */
+@Composable
+private fun rememberCowWanderState(cowId: Int, gridConfig: GridConfig): CowWanderState {
+    val state = remember(cowId) { CowWanderState() }
+    var prevGridConfig by remember(cowId) { mutableStateOf<GridConfig?>(null) }
+
+    LaunchedEffect(cowId, gridConfig) {
+        // expandGrid() shifts every existing cell by +1 col/+1 row to keep the
+        // building centered (see FarmRepository.expandGrid) — shift this cow's
+        // free-floating position the same way so it doesn't visually teleport
+        // relative to the barn/fence when the map grows.
+        prevGridConfig?.let { prev ->
+            if (gridConfig.cols != prev.cols) {
+                val shift = (gridConfig.cols - prev.cols) / 2f
+                state.col += shift
+                state.row += shift
+            }
+        }
+        prevGridConfig = gridConfig
+
+        fun randomWanderTarget(): Offset {
+            while (true) {
+                val col = Random.nextInt(gridConfig.cols)
+                val row = Random.nextInt(gridConfig.rows)
+                if (GridMath.isWithinBuildableRadius(col, row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow) &&
+                    !GridMath.isBuildingCell(col, row, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow)
+                ) {
+                    return Offset(col.toFloat(), row.toFloat())
+                }
+            }
+        }
+
+        // The barn is the only "solid" obstacle a free-floating cow can walk
+        // through: randomWanderTarget only excludes the building's own 2x2
+        // cells, but a *straight-line* walk between two valid targets on
+        // opposite sides of the barn still cuts across it (the buildable ring
+        // minus the building is a non-convex region). Model the barn as an
+        // axis-aligned rectangle in tile-space, expanded a bit past its 2x2
+        // cell footprint (+0.5 for the cell-center-to-edge half, +0.35 buffer
+        // for the mesh's roof/porch overhang and the cow sprite's own size),
+        // and route the walk around it instead of through it whenever a leg
+        // would cross it.
+        val margin = 0.5f + 0.35f
+        val rectMinCol = gridConfig.buildingAnchorCol.toFloat() - margin
+        val rectMaxCol = gridConfig.buildingAnchorCol.toFloat() + 1f + margin
+        val rectMinRow = gridConfig.buildingAnchorRow.toFloat() - margin
+        val rectMaxRow = gridConfig.buildingAnchorRow.toFloat() + 1f + margin
+
+        // Liang-Barsky segment/AABB clip test: true if segment (x0,y0)-(x1,y1)
+        // crosses or touches the rectangle's interior.
+        fun segmentHitsRect(x0: Float, y0: Float, x1: Float, y1: Float): Boolean {
+            var t0 = 0f
+            var t1 = 1f
+            val dx = x1 - x0
+            val dy = y1 - y0
+            val p = floatArrayOf(-dx, dx, -dy, dy)
+            val q = floatArrayOf(x0 - rectMinCol, rectMaxCol - x0, y0 - rectMinRow, rectMaxRow - y0)
+            for (i in 0 until 4) {
+                if (p[i] == 0f) {
+                    if (q[i] < 0f) return false
+                } else {
+                    val r = q[i] / p[i]
+                    if (p[i] < 0f) {
+                        if (r > t1) return false
+                        if (r > t0) t0 = r
+                    } else {
+                        if (r < t0) return false
+                        if (r < t1) t1 = r
+                    }
+                }
+            }
+            return true
+        }
+
+        // Builds the sequence of waypoints (ending at [end]) the cow should
+        // walk through to get from [start] to [end] without crossing the
+        // barn rectangle. A direct walk needs none; a blocked one is routed
+        // through whichever corner of the (slightly outset, so it never
+        // re-touches the rectangle) obstacle box keeps both legs clear and
+        // minimizes total distance.
+        fun planPath(start: Offset, end: Offset): List<Offset> {
+            if (!segmentHitsRect(start.x, start.y, end.x, end.y)) return listOf(end)
+            val cornerEps = 0.05f
+            val corners = listOf(
+                Offset(rectMinCol - cornerEps, rectMinRow - cornerEps),
+                Offset(rectMaxCol + cornerEps, rectMinRow - cornerEps),
+                Offset(rectMinCol - cornerEps, rectMaxRow + cornerEps),
+                Offset(rectMaxCol + cornerEps, rectMaxRow + cornerEps)
+            )
+            var best: Offset? = null
+            var bestDist = Float.POSITIVE_INFINITY
+            for (corner in corners) {
+                val leg1Clear = !segmentHitsRect(start.x, start.y, corner.x, corner.y)
+                val leg2Clear = !segmentHitsRect(corner.x, corner.y, end.x, end.y)
+                if (leg1Clear && leg2Clear) {
+                    val d = hypot(corner.x - start.x, corner.y - start.y) + hypot(end.x - corner.x, end.y - corner.y)
+                    if (d < bestDist) {
+                        bestDist = d
+                        best = corner
+                    }
+                }
+            }
+            // No single corner clears both legs (can happen if start/end are
+            // deep in a concave pocket) — falling back to a direct walk is a
+            // rare, harmless simplification rather than a full navmesh.
+            return best?.let { listOf(it, end) } ?: listOf(end)
+        }
+
+        if (state.col < 0f) {
+            val start = randomWanderTarget()
+            state.col = start.x
+            state.row = start.y
+        }
+
+        while (true) {
+            // "Graze" pause between walks, ticking the anim clock so the tail/legs
+            // keep a subtle idle sway instead of freezing.
+            var frameMs = withFrameMillis { it }
+            val pauseUntilMs = frameMs + Random.nextInt(800, 2400)
+            while (frameMs < pauseUntilMs) {
+                state.animMs = frameMs.toFloat()
+                frameMs = withFrameMillis { it }
+            }
+
+            val target = randomWanderTarget()
+            val waypoints = planPath(Offset(state.col, state.row), target)
+            val tilesPerMs = 0.5f / 1000f
+
+            for (waypoint in waypoints) {
+                val startCol = state.col
+                val startRow = state.row
+                val dCol = waypoint.x - startCol
+                val dRow = waypoint.y - startRow
+                val dist = hypot(dCol, dRow)
+                if (dist < 0.05f) continue
+                state.facingRight = dCol >= 0f
+
+                val durationMs = dist / tilesPerMs
+                val moveStartMs = frameMs
+                while (true) {
+                    frameMs = withFrameMillis { it }
+                    state.animMs = frameMs.toFloat()
+                    val t = ((frameMs - moveStartMs) / durationMs).coerceIn(0f, 1f)
+                    state.col = startCol + dCol * t
+                    state.row = startRow + dRow * t
+                    if (t >= 1f) break
+                }
+            }
+        }
+    }
+    return state
 }
 
 /**

@@ -3,9 +3,12 @@ package com.farmmathbuilder.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.farmmathbuilder.app.data.entity.PlayerEntity
 import com.farmmathbuilder.app.data.entity.SettingsEntity
 import com.farmmathbuilder.app.data.repository.FarmRepository
 import com.farmmathbuilder.app.domain.AgeBand
+import com.farmmathbuilder.app.domain.AnimalGrowth
+import com.farmmathbuilder.app.domain.AnimalUiModel
 import com.farmmathbuilder.app.domain.CowHunger
 import com.farmmathbuilder.app.domain.GridConfig
 import com.farmmathbuilder.app.domain.GridMath
@@ -50,9 +53,21 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         }
     }
 
+    /** Bundles one combine() tick's worth of derived state — replaces an earlier
+     * nested Pair/Triple now that a 5th flow (animals) is folded in too. */
+    private data class FarmSnapshot(
+        val uiCells: List<UiCell>,
+        val player: PlayerEntity?,
+        val settings: SettingsEntity?,
+        val gridConfig: GridConfig,
+        val cows: List<AnimalUiModel>,
+        val maxCows: Int
+    )
+
     private fun observeState() {
         viewModelScope.launch {
-            combine(repository.cells, repository.player, repository.settings, ticker) { cells, player, settings, now ->
+            combine(repository.cells, repository.player, repository.settings, repository.animals, ticker) { cells, player, settings, animals, now ->
+                val effectiveNow = now.takeIf { it > 0 } ?: System.currentTimeMillis()
                 val gridConfig = player?.let {
                     GridConfig(
                         cols = it.gridCols,
@@ -64,10 +79,10 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                 } ?: GridConfig.BASE
                 val uiCells = cells.map { cell ->
                     val phase = if (cell.occupantType.isCrop()) {
-                        GrowthCalculator.computePhase(cell.plantedAtTimestamp, cell.growthDurationMs, now.takeIf { it > 0 } ?: System.currentTimeMillis())
+                        GrowthCalculator.computePhase(cell.plantedAtTimestamp, cell.growthDurationMs, effectiveNow)
                     } else GrowthPhase.NONE
                     val progress = if (cell.occupantType.isCrop()) {
-                        GrowthCalculator.computeProgress(cell.plantedAtTimestamp, cell.growthDurationMs, now.takeIf { it > 0 } ?: System.currentTimeMillis())
+                        GrowthCalculator.computeProgress(cell.plantedAtTimestamp, cell.growthDurationMs, effectiveNow)
                     } else 0f
                     UiCell(
                         id = cell.id,
@@ -84,20 +99,25 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                         isWithinBuildableRadius = GridMath.isWithinBuildableRadius(cell.col, cell.row, gridConfig.cols, gridConfig.rows, gridConfig.buildableRadius, gridConfig.buildingAnchorCol, gridConfig.buildingAnchorRow)
                     )
                 }
-                val cowHungry = player?.let {
-                    CowHunger.isHungry(it.cowLastFedTimestamp, now.takeIf { n -> n > 0 } ?: System.currentTimeMillis())
-                } ?: false
-                Triple(uiCells, player, settings) to (gridConfig to cowHungry)
-            }.collect { (data, extra) ->
-                val (uiCells, player, settings) = data
-                val (gridConfig, cowHungry) = extra
+                val cowModels = animals.map { animal ->
+                    AnimalUiModel(
+                        id = animal.id,
+                        type = animal.type,
+                        stage = AnimalGrowth.stage(animal.bornAtTimestamp, effectiveNow),
+                        isHungry = CowHunger.isHungry(animal.lastFedTimestamp, effectiveNow)
+                    )
+                }
+                val maxCowsValue = player?.let { repository.maxCows(it) } ?: FarmRepository.COW_BASE_CAP
+                FarmSnapshot(uiCells, player, settings, gridConfig, cowModels, maxCowsValue)
+            }.collect { snapshot ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    cells = uiCells,
-                    player = player,
-                    settings = settings,
-                    gridConfig = gridConfig,
-                    isCowHungry = cowHungry
+                    cells = snapshot.uiCells,
+                    player = snapshot.player,
+                    settings = snapshot.settings,
+                    gridConfig = snapshot.gridConfig,
+                    cows = snapshot.cows,
+                    maxCows = snapshot.maxCows
                 )
             }
         }
@@ -253,25 +273,58 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(moveBuildingSnackbar = null)
     }
 
-    // ---------- Cow ----------
+    // ---------- Cows (shop + feeding + breeding) ----------
 
-    /** Tapping the cow while she's hungry (FarmGridCanvas only fires this when
-     * [FarmUiState.isCowHungry] is true) feeds her 1 harvested carrot and resets
-     * her hunger timer. If the player has none, nothing changes and a hint
-     * snackbar explains why (harvest a carrot first). */
-    fun feedCow() {
+    /** Tapping a cow while she's hungry (FarmGridCanvas only fires this for a
+     * cow whose own [com.farmmathbuilder.app.domain.AnimalUiModel.isHungry] is
+     * true) feeds her 1 harvested carrot and resets her hunger timer. If the
+     * player has none, nothing changes and a hint snackbar explains why. Every
+     * 2nd feed (any cow) also rolls a breeding check server-side — a success
+     * surfaces its own snackbar (see FarmRepository.feedAnimal). */
+    fun feedCow(animalId: Int) {
         viewModelScope.launch {
-            val fed = repository.feedCow()
-            if (!fed) {
-                _uiState.value = _uiState.value.copy(
-                    cowFeedSnackbar = "🥕 You need a carrot to feed her — harvest one first!"
-                )
-            }
+            val result = repository.feedAnimal(animalId)
+            _uiState.value = _uiState.value.copy(
+                cowFeedSnackbar = when {
+                    !result.fed -> "🥕 You need a carrot to feed her — harvest one first!"
+                    result.calfBorn -> "🐄 A new calf was born!"
+                    else -> null
+                }
+            )
         }
     }
 
     fun consumeCowFeedSnackbar() {
         _uiState.value = _uiState.value.copy(cowFeedSnackbar = null)
+    }
+
+    fun canBuyCow(): Boolean {
+        val state = _uiState.value
+        val player = state.player ?: return false
+        return player.wheatCurrency >= FarmRepository.COW_COST && state.cows.size < state.maxCows
+    }
+
+    /** Buys one adult cow for [FarmRepository.COW_COST] wheat — the top-right
+     * animal-shop icon column's tap action (see HudOverlay.AnimalShopColumn). */
+    fun buyCow() {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val player = state.player
+            val ok = repository.buyCow()
+            _uiState.value = _uiState.value.copy(
+                cowShopSnackbar = when {
+                    ok -> "🐄 New cow purchased!"
+                    player == null -> null
+                    state.cows.size >= state.maxCows -> "Cow pen is full — expand the map for more room"
+                    player.wheatCurrency < FarmRepository.COW_COST -> "Not enough wheat — need ${FarmRepository.COW_COST - player.wheatCurrency} more"
+                    else -> null
+                }
+            )
+        }
+    }
+
+    fun consumeCowShopSnackbar() {
+        _uiState.value = _uiState.value.copy(cowShopSnackbar = null)
     }
 
     // ---------- Math exercise (casual single-exercise-for-a-field flow) ----------
