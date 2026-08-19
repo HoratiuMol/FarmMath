@@ -1,0 +1,537 @@
+<title>Five Timber-Frame Barns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4efe2; --panel: #fbf8f0; --panel-2: #eee7d5; --ink: #241f16;
+    --muted: #746b57; --line: #e0d6bd; --accent: #a63d2a; --accent-ink: #fff8f1;
+    --ground-a: #efe9db; --ground-b: #e6ddc7;
+    --shadow: 0 1px 2px rgba(36, 31, 22, 0.06), 0 8px 20px -12px rgba(36, 31, 22, 0.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17140e; --panel: #201b13; --panel-2: #292217; --ink: #f1e9d6;
+      --muted: #a89a7d; --line: #382f20; --accent: #e0764f; --accent-ink: #241207;
+      --ground-a: #1c1710; --ground-b: #241e14;
+      --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 10px 24px -12px rgba(0,0,0,0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17140e; --panel: #201b13; --panel-2: #292217; --ink: #f1e9d6;
+    --muted: #a89a7d; --line: #382f20; --accent: #e0764f; --accent-ink: #241207;
+    --ground-a: #1c1710; --ground-b: #241e14;
+    --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 10px 24px -12px rgba(0,0,0,0.55);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4efe2; --panel: #fbf8f0; --panel-2: #eee7d5; --ink: #241f16;
+    --muted: #746b57; --line: #e0d6bd; --accent: #a63d2a; --accent-ink: #fff8f1;
+    --ground-a: #efe9db; --ground-b: #e6ddc7;
+    --shadow: 0 1px 2px rgba(36,31,22,0.06), 0 8px 20px -12px rgba(36,31,22,0.25);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Public Sans", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1240px; margin: 0 auto; padding: 48px 28px 72px; }
+  header { display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px; max-width: 78ch; }
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif; font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.06; margin: 0; font-weight: 600; text-wrap: balance; letter-spacing: -0.01em;
+  }
+  .subtitle { color: var(--muted); font-size: 14.5px; line-height: 1.6; margin: 0; }
+  .subtitle code {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px;
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+  }
+  .rig {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 16px; margin-bottom: 24px; box-shadow: var(--shadow);
+  }
+  .rig .stat {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .rig label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  input[type="range"] { accent-color: var(--accent); width: 130px; }
+  .rig .val {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    min-width: 3.6ch; color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .section-label {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+    margin: 30px 0 12px; padding-top: 10px; border-top: 1px solid var(--line);
+  }
+  .section-label:first-of-type { border-top: none; padding-top: 0; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow);
+  }
+  .card-head { display: flex; flex-direction: column; gap: 3px; }
+  .card-idx {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px;
+    color: var(--accent); letter-spacing: 0.06em;
+  }
+  .card-head h2 {
+    font-family: "Fraunces", Georgia, serif; font-size: 19px; margin: 0;
+    font-weight: 600; letter-spacing: -0.005em;
+  }
+  .card-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+  .stage { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--ground-a); }
+  canvas { display: block; width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+  .swatch-chip {
+    display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  .swatch-dot { width: 13px; height: 13px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.18); }
+  .note {
+    font-size: 12.5px; color: var(--muted); line-height: 1.65;
+    border-top: 1px solid var(--line); padding-top: 16px; margin-top: 34px; max-width: 78ch;
+  }
+  .note code {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+  }
+  footer { margin-top: 24px; font-size: 11.5px; color: var(--muted); text-align: center; }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Farm Math Builder &middot; Asset Concept</span>
+    <h1>Five timber-frame barns</h1>
+    <p class="subtitle">
+      Modeled after the reference photos: a flared gambrel roof, an exposed
+      king-post truss under the ridge, and cross-braced plank doors &mdash;
+      the three details that read as "timber-frame party barn" from across a
+      field. Three keep the full picture (porches, dormer, windows); two
+      strip everything but the signature silhouette down to the fewest
+      triangles that still read correctly.
+    </p>
+  </header>
+
+  <div class="rig">
+    <span class="stat" id="statsTag"></span>
+    <label>Turntable <input id="yawSlider" type="range" min="0" max="360" step="1" value="30" /></label>
+    <span class="val" id="yawVal">30&deg;</span>
+    <label>Light <input id="lightSlider" type="range" min="0" max="360" step="1" value="50" /></label>
+    <span class="val" id="lightVal">50&deg;</span>
+  </div>
+
+  <div class="section-label">Full detail</div>
+  <div class="grid" id="cardGridFull"></div>
+
+  <div class="section-label">Minimalist, still identifiable</div>
+  <div class="grid" id="cardGridMin"></div>
+
+  <p class="note">
+    Still concept meshes for comparing shape and read-at-a-glance clarity,
+    not drop-in assets &mdash; the live barn is a Wings3D export
+    (<code>barn.obj</code>, 1,657 verts). Whichever one wins would still need
+    a proper modeling pass before it replaces <code>domain/BarnMesh.kt</code>'s
+    asset.
+  </p>
+
+  <footer>Farm Math Builder &middot; docs/previews/barn-timberframe-preview.html</footer>
+</main>
+
+<script>
+// ---------- vector + shading helpers ----------
+function sub(a,b){ return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]; }
+function cross(u,v){ return [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]; }
+function dot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function len(v){ return Math.hypot(v[0],v[1],v[2]) || 1; }
+function normalize(v){ const l=len(v); return [v[0]/l,v[1]/l,v[2]/l]; }
+function faceNormal(a,b,c){ return normalize(cross(sub(b,a), sub(c,a))); }
+function rotateY(p,a){ const c=Math.cos(a), s=Math.sin(a); return [p[0]*c+p[2]*s, p[1], -p[0]*s+p[2]*c]; }
+function rotateX(p,a){ const c=Math.cos(a), s=Math.sin(a); return [p[0], p[1]*c-p[2]*s, p[1]*s+p[2]*c]; }
+function shade(color, brightness){
+  const b = Math.max(0.28, Math.min(1.15, brightness));
+  return `rgb(${Math.min(255,Math.round(color[0]*b))},${Math.min(255,Math.round(color[1]*b))},${Math.min(255,Math.round(color[2]*b))})`;
+}
+function hex(c){ return '#' + c.map(x => x.toString(16).padStart(2,'0')).join('').toUpperCase(); }
+
+// ---------- procedural mesh builders (auto-orient via a reference point
+// known to sit inside the solid, so hand-picked vertex winding never has to
+// be verified face by face) ----------
+function addTriAuto(tris, a, b, c, color, ref){
+  const n = faceNormal(a,b,c);
+  const fc = [(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3];
+  if (dot(n, sub(fc, ref)) < 0) tris.push({a:a,b:c,c:b,color});
+  else tris.push({a:a,b:b,c:c,color});
+}
+function addQuadAuto(tris, p0,p1,p2,p3, color, ref){
+  addTriAuto(tris,p0,p1,p2,color,ref);
+  addTriAuto(tris,p0,p2,p3,color,ref);
+}
+function box(tris, cx,cy,cz, boxW,boxH,boxD, color, skipTop){
+  const x0=cx-boxW/2,x1=cx+boxW/2, y0=cy-boxH/2,y1=cy+boxH/2, z0=cz-boxD/2,z1=cz+boxD/2;
+  const a=[x0,y0,z0], b=[x1,y0,z0], c=[x1,y1,z0], d=[x0,y1,z0];
+  const e=[x0,y0,z1], f=[x1,y0,z1], g=[x1,y1,z1], h=[x0,y1,z1];
+  const ref=[cx,cy,cz];
+  addQuadAuto(tris,e,f,g,h,color,ref);
+  addQuadAuto(tris,b,a,d,c,color,ref);
+  addQuadAuto(tris,a,e,h,d,color,ref);
+  addQuadAuto(tris,f,b,c,g,color,ref);
+  if (!skipTop) addQuadAuto(tris,d,h,g,c,color,ref);
+  addQuadAuto(tris,a,b,f,e,color,ref);
+}
+// profilePts: [x,y] polyline, left eave -> ...ridge points... -> right eave,
+// both eaves at the same y (sits flush on a box's wall-top). Produces the
+// sloped roof faces plus fan-triangulated gable ends.
+function gabledRoof(tris, cx,cz, profilePts, z0,z1, roofColor, gableColor, ref){
+  const n = profilePts.length;
+  for (let i=0;i<n-1;i++){
+    const a=[cx+profilePts[i][0], profilePts[i][1], z0];
+    const b=[cx+profilePts[i+1][0], profilePts[i+1][1], z0];
+    const c=[cx+profilePts[i+1][0], profilePts[i+1][1], z1];
+    const d=[cx+profilePts[i][0], profilePts[i][1], z1];
+    addQuadAuto(tris,a,b,c,d,roofColor,ref);
+  }
+  for (const zz of [z0,z1]){
+    const p0=[cx+profilePts[0][0], profilePts[0][1], zz];
+    for (let i=1;i<n-1;i++){
+      const pi=[cx+profilePts[i][0], profilePts[i][1], zz];
+      const pi1=[cx+profilePts[i+1][0], profilePts[i+1][1], zz];
+      addTriAuto(tris,p0,pi,pi1,gableColor,ref);
+    }
+  }
+}
+// a thin coplanar accent panel (door, window, vent...) sitting just proud
+// of a wall/gable face so it never z-fights with it.
+function panel(tris, cx,cy,cz, w,h, color){
+  addQuadAuto(tris, [cx-w/2,cy-h/2,cz],[cx+w/2,cy-h/2,cz],[cx+w/2,cy+h/2,cz],[cx-w/2,cy+h/2,cz], color, [cx,cy,cz-0.05]);
+}
+// a thin rectangular strut between two 2D points at a fixed depth — the
+// building block for exposed-truss beams and door X-braces, things a plain
+// axis-aligned box can't make.
+function beam2D(tris, x0,y0,x1,y1, z, thick, depth, color){
+  const dx=x1-x0, dy=y1-y0, l=Math.hypot(dx,dy)||1;
+  const nx=-dy/l*thick/2, ny=dx/l*thick/2;
+  const zb=z-depth/2, zf=z+depth/2;
+  const p0=[x0-nx,y0-ny,zb], p1=[x1-nx,y1-ny,zb], p2=[x1+nx,y1+ny,zb], p3=[x0+nx,y0+ny,zb];
+  const p4=[x0-nx,y0-ny,zf], p5=[x1-nx,y1-ny,zf], p6=[x1+nx,y1+ny,zf], p7=[x0+nx,y0+ny,zf];
+  const ref=[(x0+x1)/2,(y0+y1)/2,z];
+  addQuadAuto(tris,p0,p1,p2,p3,color,ref);
+  addQuadAuto(tris,p5,p4,p7,p6,color,ref);
+  addQuadAuto(tris,p0,p3,p7,p4,color,ref);
+  addQuadAuto(tris,p1,p5,p6,p2,color,ref);
+  addQuadAuto(tris,p3,p2,p6,p7,color,ref);
+  addQuadAuto(tris,p0,p4,p5,p1,color,ref);
+}
+// a lean-to roof slab with real thickness (top, underside, outer fascia,
+// two end caps) rather than a single 2D plane — a flat plane has only one
+// normal direction, so from most viewing angles it reads as a flat dark
+// silhouette; the fascia edge gives it a lit surface and a visible profile.
+function leanToSlab(tris, xIn,yIn,xOut,yOut, z0,z1, thickness, color){
+  const yInB = yIn - thickness, yOutB = yOut - thickness;
+  const ref = [(xIn+xOut)/2, (yIn+yOut)/2 - thickness/2, (z0+z1)/2];
+  addQuadAuto(tris, [xIn,yIn,z0],[xIn,yIn,z1],[xOut,yOut,z1],[xOut,yOut,z0], color, ref);
+  addQuadAuto(tris, [xIn,yInB,z1],[xIn,yInB,z0],[xOut,yOutB,z0],[xOut,yOutB,z1], color, ref);
+  addQuadAuto(tris, [xOut,yOut,z0],[xOut,yOut,z1],[xOut,yOutB,z1],[xOut,yOutB,z0], color, ref);
+  addQuadAuto(tris, [xIn,yIn,z0],[xOut,yOut,z0],[xOut,yOutB,z0],[xIn,yInB,z0], color, ref);
+  addQuadAuto(tris, [xOut,yOut,z1],[xIn,yIn,z1],[xIn,yInB,z1],[xOut,yOutB,z1], color, ref);
+}
+// cross-braced barn door: a flat panel plus an X of beams proud of it —
+// the single most recognizable detail in the reference photos.
+function xBraceDoor(tris, cx, yBottom, w, h, z, panelColor, braceColor){
+  panel(tris, cx, yBottom+h/2, z, w, h, panelColor);
+  const x0=cx-w/2, x1=cx+w/2, y0=yBottom, y1=yBottom+h;
+  beam2D(tris, x0,y0, x1,y1, z+0.02, 0.055, 0.03, braceColor);
+  beam2D(tris, x1,y0, x0,y1, z+0.02, 0.055, 0.03, braceColor);
+}
+
+// ---------- shared timber-frame template ----------
+// One skeleton — wall box, gambrel roof, footing — reused by all five
+// designs. What differs is which optional pieces (truss, porches, dormer,
+// windows, hayloft door) get switched on, and the materials.
+function buildTimberBarn(opts){
+  const tris = [];
+  const {
+    wallW=2.8, wallH=1.3, wallD=2.3,
+    roofProfile, roofColor, gableColor,
+    wallColor, footColor, doorColor, braceColor,
+    hasTruss=false, trussSimple=false, trussColor,
+    hasPorchLeft=false, hasPorchRight=false, porchColor, postColor,
+    hasDormer=false, dormerColor,
+    hasWindows=false, windowColor, hasHayloftDoor=false,
+    hasSconce=false, sconceColor
+  } = opts;
+
+  const wallTop = wallH/2;
+  const wallBottom = -wallH/2;
+  const zFront = wallD/2;
+
+  box(tris, 0, wallBottom-0.1, 0, wallW+0.2, 0.2, wallD+0.2, footColor);
+  box(tris, 0, 0, 0, wallW, wallH, wallD, wallColor, true);
+  gabledRoof(tris, 0, 0, roofProfile, -wallD/2, wallD/2, roofColor, gableColor, [0, wallTop*0.5, 0]);
+  const ridgeY = Math.max(...roofProfile.map(p => p[1]));
+
+  // ground-level cross-braced door
+  xBraceDoor(tris, 0, wallBottom, wallW*0.42, wallTop-wallBottom-0.08, zFront+0.001, doorColor, braceColor);
+
+  if (hasWindows){
+    panel(tris, -wallW*0.33, wallTop*0.4, zFront+0.001, 0.28, 0.36, windowColor);
+    panel(tris, wallW*0.33, wallTop*0.4, zFront+0.001, 0.28, 0.36, windowColor);
+    beam2D(tris, -wallW*0.33-0.14,wallTop*0.4, -wallW*0.33+0.14,wallTop*0.4, zFront+0.02, 0.03,0.02, braceColor);
+    beam2D(tris, -wallW*0.33,wallTop*0.4-0.18, -wallW*0.33,wallTop*0.4+0.18, zFront+0.02, 0.03,0.02, braceColor);
+    beam2D(tris, wallW*0.33-0.14,wallTop*0.4, wallW*0.33+0.14,wallTop*0.4, zFront+0.02, 0.03,0.02, braceColor);
+    beam2D(tris, wallW*0.33,wallTop*0.4-0.18, wallW*0.33,wallTop*0.4+0.18, zFront+0.02, 0.03,0.02, braceColor);
+  }
+
+  if (hasHayloftDoor){
+    xBraceDoor(tris, 0, wallTop+ (ridgeY-wallTop)*0.18, 0.5, 0.55, zFront+0.001, doorColor, braceColor);
+  }
+
+  if (hasSconce){
+    box(tris, -wallW*0.28, wallBottom+0.85, zFront+0.06, 0.05,0.14,0.05, sconceColor);
+    box(tris, wallW*0.28, wallBottom+0.85, zFront+0.06, 0.05,0.14,0.05, sconceColor);
+  }
+
+  if (hasTruss){
+    const baseY = wallTop + (ridgeY-wallTop)*0.1;
+    const z = zFront + 0.03;
+    beam2D(tris, 0,baseY, 0,ridgeY-0.04, z, 0.09,0.07, trussColor);
+    if (!trussSimple){
+      beam2D(tris, 0,baseY+0.05, -0.55,baseY+0.05, z, 0.06,0.06, trussColor);
+      beam2D(tris, 0,baseY+0.05, 0.55,baseY+0.05, z, 0.06,0.06, trussColor);
+    }
+    beam2D(tris, 0,baseY+0.22, -0.9,baseY-0.02, z, 0.07,0.06, trussColor);
+    beam2D(tris, 0,baseY+0.22, 0.9,baseY-0.02, z, 0.07,0.06, trussColor);
+  }
+
+  if (hasPorchLeft || hasPorchRight){
+    const span=1.05, dropY=0.55, postT=0.09;
+    for (const side of [hasPorchLeft?-1:0, hasPorchRight?1:0]){
+      if (!side) continue;
+      const xIn = side*wallW/2, xOut = side*(wallW/2+span);
+      const yIn = wallTop-0.15, yOut = wallTop-0.15-dropY;
+      leanToSlab(tris, xIn,yIn, xOut,yOut, -wallD/2,wallD/2, 0.07, porchColor);
+      box(tris, xOut-side*0.12, (wallBottom-0.1+yOut)/2, wallD/2-0.15, postT,(yOut-(wallBottom-0.1)),postT, postColor);
+      box(tris, xOut-side*0.12, (wallBottom-0.1+yOut)/2, -wallD/2+0.15, postT,(yOut-(wallBottom-0.1)),postT, postColor);
+    }
+  }
+
+  if (hasDormer){
+    const dw=0.9, dh=0.34, dz0=-0.35, dz1=0.55, attachY=0.62;
+    box(tris, 0, attachY+dh/2, (dz0+dz1)/2, dw, dh, dz1-dz0, dormerColor, true);
+    addQuadAuto(tris,
+      [-dw/2,attachY+dh,dz0],[-dw/2,attachY+dh,dz1],
+      [-dw/2-0.12,attachY+dh+0.22,dz1],[-dw/2-0.12,attachY+dh+0.22,dz0],
+      roofColor, [0,attachY+dh+0.1,(dz0+dz1)/2]);
+    addQuadAuto(tris,
+      [dw/2,attachY+dh,dz1],[dw/2,attachY+dh,dz0],
+      [dw/2+0.12,attachY+dh+0.22,dz0],[dw/2+0.12,attachY+dh+0.22,dz1],
+      roofColor, [0,attachY+dh+0.1,(dz0+dz1)/2]);
+    addQuadAuto(tris,
+      [-dw/2-0.12,attachY+dh+0.22,dz1],[dw/2+0.12,attachY+dh+0.22,dz1],
+      [dw/2,attachY+dh,dz1],[-dw/2,attachY+dh,dz1],
+      roofColor, [0,attachY+dh+0.05,(dz0+dz1)/2]);
+    panel(tris, 0, attachY+dh*0.5, dz1+0.001, 0.3, 0.24, windowColor||[0x2b,0x2b,0x2b]);
+  }
+
+  return tris;
+}
+
+const DESIGNS_FULL = [
+  {
+    name: 'Grand Timber Frame Barn',
+    desc: 'Whitewashed board siding, black hardware, an exposed king-post truss, flanking lean-to porches on both sides — the showpiece from the first reference.',
+    opts: {
+      wallW: 3.0, wallD: 2.4,
+      roofProfile: [[-1.6,0],[-1.15,1.2],[0,1.62],[1.15,1.2],[1.6,0]],
+      wallColor:[0xE4,0xD9,0xBC], roofColor:[0x3E,0x3A,0x33], gableColor:[0xE4,0xD9,0xBC],
+      footColor:[0x9A,0x93,0x85], doorColor:[0xE4,0xD9,0xBC], braceColor:[0x1C,0x17,0x12],
+      hasTruss:true, trussColor:[0x4A,0x38,0x26],
+      hasPorchLeft:true, hasPorchRight:true, porchColor:[0x3E,0x3A,0x33], postColor:[0x7A,0x5A,0x34],
+      hasWindows:true, windowColor:[0x2B,0x2B,0x2B], hasHayloftDoor:true,
+      hasSconce:true, sconceColor:[0x1C,0x17,0x12]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Truss','trussColor'],['Porch posts','postColor']]
+  },
+  {
+    name: 'Single-Wing Cedar Barn',
+    desc: 'Natural cedar boards, one lean-to porch, a shed dormer breaking the roof plane — the second reference, angled for a three-quarter read.',
+    opts: {
+      wallW: 3.0, wallD: 2.3,
+      roofProfile: [[-1.6,0],[-1.2,1.15],[0,1.7],[1.2,1.15],[1.6,0]],
+      wallColor:[0xC9,0xA6,0x6B], roofColor:[0x4A,0x38,0x30], gableColor:[0xC9,0xA6,0x6B],
+      footColor:[0x8C,0x84,0x74], doorColor:[0xB0,0x8A,0x54], braceColor:[0x3A,0x2A,0x1C],
+      hasTruss:true, trussColor:[0x8B,0x62,0x39],
+      hasPorchRight:true, porchColor:[0x4A,0x38,0x30], postColor:[0x8B,0x62,0x39],
+      hasWindows:false, hasHayloftDoor:true,
+      hasDormer:true, dormerColor:[0xC9,0xA6,0x6B], windowColor:[0x2B,0x22,0x18],
+      hasSconce:true, sconceColor:[0x1C,0x17,0x12]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Truss','trussColor'],['Door','doorColor']]
+  },
+  {
+    name: 'Compact Timber Barn',
+    desc: 'The same truss and cross-braced doors on a no-porch, no-dormer footprint — barn-red paint over the timber frame instead of raw wood.',
+    opts: {
+      wallW: 2.6, wallD: 2.1,
+      roofProfile: [[-1.4,0],[-1.0,1.05],[0,1.45],[1.0,1.05],[1.4,0]],
+      wallColor:[0x8C,0x4A,0x32], roofColor:[0x2B,0x2B,0x2B], gableColor:[0x8C,0x4A,0x32],
+      footColor:[0x8C,0x84,0x74], doorColor:[0xF1,0xE8,0xD3], braceColor:[0x2B,0x2B,0x2B],
+      hasTruss:true, trussColor:[0x4A,0x38,0x26],
+      hasWindows:true, windowColor:[0x2B,0x2B,0x2B], hasHayloftDoor:true
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Truss','trussColor'],['Door','doorColor']]
+  }
+];
+
+const DESIGNS_MIN = [
+  {
+    name: 'Minimalist — Natural Timber',
+    desc: 'Just the three signature moves: flared gambrel, a bare king-post + knee braces, one cross-braced door. No windows, porches, or paint.',
+    opts: {
+      wallW: 2.5, wallD: 2.0, wallH: 1.15,
+      roofProfile: [[-1.35,0],[-0.95,1.0],[0,1.4],[0.95,1.0],[1.35,0]],
+      wallColor:[0xB9,0x9A,0x6B], roofColor:[0x3A,0x32,0x27], gableColor:[0xB9,0x9A,0x6B],
+      footColor:[0x8C,0x84,0x74], doorColor:[0xB9,0x9A,0x6B], braceColor:[0x2B,0x22,0x18],
+      hasTruss:true, trussSimple:true, trussColor:[0x5A,0x42,0x2A]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Truss','trussColor']]
+  },
+  {
+    name: 'Minimalist — Painted White',
+    desc: 'Same reduced skeleton, repainted: white walls, black roof, black truss and door braces — a high-contrast farmhouse-modern read at a glance.',
+    opts: {
+      wallW: 2.5, wallD: 2.0, wallH: 1.15,
+      roofProfile: [[-1.35,0],[-0.95,1.0],[0,1.4],[0.95,1.0],[1.35,0]],
+      wallColor:[0xF1,0xEC,0xDD], roofColor:[0x22,0x22,0x22], gableColor:[0xF1,0xEC,0xDD],
+      footColor:[0x9A,0x93,0x85], doorColor:[0xF1,0xEC,0xDD], braceColor:[0x22,0x22,0x22],
+      hasTruss:true, trussSimple:true, trussColor:[0x22,0x22,0x22]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Truss / braces','trussColor']]
+  }
+];
+
+DESIGNS_FULL.forEach(d => { d.tris = buildTimberBarn(d.opts); });
+DESIGNS_MIN.forEach(d => { d.tris = buildTimberBarn(d.opts); });
+
+// ---------- shared render rig ----------
+let totalTris = 0;
+[...DESIGNS_FULL, ...DESIGNS_MIN].forEach(d => totalTris += d.tris.length);
+document.getElementById('statsTag').textContent = (DESIGNS_FULL.length+DESIGNS_MIN.length) + ' concepts · ' + totalTris + ' triangles total';
+
+function mountCards(designs, gridId, startIdx){
+  const grid = document.getElementById(gridId);
+  return designs.map((design, i) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const legendHtml = design.legend
+      .filter(([, key]) => design.opts[key])
+      .map(([label, key]) => {
+        const c = design.opts[key];
+        return `<span class="swatch-chip"><span class="swatch-dot" style="background:${hex(c)}"></span>${label} ${hex(c)}</span>`;
+      }).join('');
+    card.innerHTML = `
+      <div class="card-head">
+        <span class="card-idx">0${startIdx + i}</span>
+        <h2>${design.name}</h2>
+      </div>
+      <p class="card-desc">${design.desc}</p>
+      <div class="stage"><canvas width="620" height="460"></canvas></div>
+      <div class="legend">${legendHtml}</div>
+    `;
+    grid.appendChild(card);
+    const canvas = card.querySelector('canvas');
+    return { canvas, ctx: canvas.getContext('2d'), tris: design.tris };
+  });
+}
+
+const cards = [
+  ...mountCards(DESIGNS_FULL, 'cardGridFull', 1),
+  ...mountCards(DESIGNS_MIN, 'cardGridMin', DESIGNS_FULL.length + 1)
+];
+
+const yawSlider = document.getElementById('yawSlider');
+const yawVal = document.getElementById('yawVal');
+const lightSlider = document.getElementById('lightSlider');
+const lightVal = document.getElementById('lightVal');
+const pitch = 0.5;
+
+function drawGround(ctx, canvas){
+  const style = getComputedStyle(document.documentElement);
+  const a = style.getPropertyValue('--ground-a').trim();
+  const bcol = style.getPropertyValue('--ground-b').trim();
+  ctx.fillStyle = a;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle = bcol;
+  ctx.lineWidth = 1;
+  const step = 34;
+  for (let x=-canvas.height; x<canvas.width+canvas.height; x+=step){
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+canvas.height,canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,canvas.height); ctx.lineTo(x+canvas.height,0); ctx.stroke();
+  }
+}
+
+function bounds(tris){
+  let min=[Infinity,Infinity,Infinity], max=[-Infinity,-Infinity,-Infinity];
+  for (const t of tris) for (const v of [t.a,t.b,t.c]) for (let k=0;k<3;k++){
+    if (v[k]<min[k]) min[k]=v[k];
+    if (v[k]>max[k]) max[k]=v[k];
+  }
+  const center=[0,1,2].map(k=>(min[k]+max[k])/2);
+  const extent=Math.max(...[0,1,2].map(k=>max[k]-min[k]));
+  return { center, extent };
+}
+
+function project(p, center, extent, yaw, canvas, scale){
+  let v = sub(p, center);
+  v = rotateY(v, yaw);
+  v = rotateX(v, pitch);
+  const s = (scale * Math.min(canvas.width, canvas.height)) / extent;
+  return { x: canvas.width/2 + v[0]*s, y: canvas.height*0.66 - v[1]*s, z: v[2] };
+}
+
+function renderAll(){
+  const yawDeg = parseFloat(yawSlider.value);
+  yawVal.textContent = Math.round(yawDeg) + '°';
+  const yaw = (yawDeg*Math.PI)/180;
+  const lightDeg = parseFloat(lightSlider.value);
+  lightVal.textContent = Math.round(lightDeg) + '°';
+  const lightRad = (lightDeg*Math.PI)/180;
+  const lightDir = normalize([Math.cos(lightRad), 0.9, Math.sin(lightRad)]);
+
+  for (const { canvas, ctx, tris } of cards){
+    drawGround(ctx, canvas);
+    const { center, extent } = bounds(tris);
+    const drawList = [];
+    for (const t of tris){
+      const pa = project(t.a, center, extent, yaw, canvas, 0.44);
+      const pb = project(t.b, center, extent, yaw, canvas, 0.44);
+      const pc = project(t.c, center, extent, yaw, canvas, 0.44);
+      const depth = (pa.z+pb.z+pc.z)/3;
+      const normal = faceNormal(t.a,t.b,t.c);
+      const facing = rotateX(rotateY(normal, yaw), pitch);
+      const brightness = 0.35 + Math.max(0, dot(facing, lightDir))*0.85;
+      drawList.push({ pa,pb,pc, color:t.color, brightness, depth });
+    }
+    drawList.sort((x,y) => x.depth - y.depth);
+    for (const t of drawList){
+      ctx.beginPath();
+      ctx.moveTo(t.pa.x, t.pa.y);
+      ctx.lineTo(t.pb.x, t.pb.y);
+      ctx.lineTo(t.pc.x, t.pc.y);
+      ctx.closePath();
+      ctx.fillStyle = shade(t.color, t.brightness);
+      ctx.fill();
+    }
+  }
+}
+
+yawSlider.addEventListener('input', renderAll);
+lightSlider.addEventListener('input', renderAll);
+renderAll();
+</script>

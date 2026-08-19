@@ -32,5 +32,17 @@ data class PlayerEntity(
     /** Counts feed actions (any animal) since the last breeding roll — every
      * 2nd feed rolls one breeding check and resets to 0. See
      * FarmRepository.feedAnimal / the founder's "al alimentar dos vacas" rule. */
-    val cowFeedsSinceBreedingRoll: Int = 0
+    val cowFeedsSinceBreedingRoll: Int = 0,
+    /** A currency earned only by solving math — kept deliberately separate from
+     * wheatCurrency (which comes from farming) so a child can see matemáticas
+     * pay off in something visibly its own, not folded into the farm economy.
+     * +1 per correct answer in both the casual exercise flow and the 10-in-a-
+     * row Challenge, plus a bonus on full Challenge completion. Not spendable
+     * yet — see FarmRepository for where it's granted. */
+    val mathStars: Int = 0,
+    /** True once today's daily math mission (solve
+     * [com.farmmathbuilder.app.data.repository.FarmRepository.DAILY_MISSION_TARGET]
+     * problems) has paid out its bonus — resets to false every daily reset
+     * alongside exercisesSolvedToday, same as every other "today" field. */
+    val dailyMissionClaimed: Boolean = false
 )

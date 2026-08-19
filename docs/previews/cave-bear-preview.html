@@ -1,0 +1,559 @@
+<title>Bear Den</title>
+<style>
+  :root {
+    --bg: #f3eee1; --panel: #fbf8f0; --ink: #2c2418; --muted: #7a6f5c;
+    --accent: #5c8a3a; --line: #e4dac4;
+    --ground-a: #9CCC65; --ground-b: #8fc158;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1812; --panel: #24201a; --ink: #f1ead9; --muted: #a79a82;
+      --accent: #7fb65a; --line: #362f23;
+      --ground-a: #4f7a36; --ground-b: #466c30;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1812; --panel: #24201a; --ink: #f1ead9; --muted: #a79a82;
+    --accent: #7fb65a; --line: #362f23;
+    --ground-a: #4f7a36; --ground-b: #466c30;
+  }
+  :root[data-theme="light"] {
+    --bg: #f3eee1; --panel: #fbf8f0; --ink: #2c2418; --muted: #7a6f5c;
+    --accent: #5c8a3a; --line: #e4dac4;
+    --ground-a: #9CCC65; --ground-b: #8fc158;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1200px; margin: 0 auto; padding: 40px 24px 64px; }
+  header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  h1 { font-size: clamp(26px, 4vw, 34px); line-height: 1.1; margin: 0; font-weight: 700; text-wrap: balance; }
+  .subtitle { color: var(--muted); font-size: 14.5px; max-width: 76ch; line-height: 1.55; margin: 0; }
+  .grid {
+    display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+    gap: 20px; align-items: start;
+  }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .card-head h2 { font-size: 15px; margin: 0; font-weight: 700; }
+  .desc { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin: 0; }
+  .desc b { color: var(--ink); }
+  .anim-note { font-size: 11.5px; color: var(--accent); font-weight: 600; margin: 0; }
+  .stage { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); position: relative; }
+  canvas { display: block; width: 100%; height: auto; }
+  .hud {
+    position: absolute; top: 10px; left: 10px; font-size: 11px; font-weight: 600;
+    padding: 5px 9px; border-radius: 7px; background: rgba(0,0,0,0.55); color: #fff;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em; pointer-events: none;
+  }
+  .row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .row button {
+    font-size: 11.5px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); cursor: pointer;
+  }
+  .row button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .swatches { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .swatch-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); }
+  .timeline { display: flex; gap: 6px; margin-top: 4px; }
+  .timeline .seg { flex: 1; height: 6px; border-radius: 3px; background: var(--line); position: relative; overflow: hidden; }
+  .timeline .seg span { position: absolute; inset: 0; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+  .lbl { font-size: 10.5px; color: var(--muted); flex: 1; text-align: center; }
+  .note {
+    font-size: 12.5px; color: var(--muted); line-height: 1.6;
+    border-top: 1px solid var(--line); padding-top: 14px; margin-top: 28px;
+  }
+  .note code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  footer { margin-top: 20px; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Farm Math Builder &middot; Asset Preview</span>
+    <h1>Cave &amp; bear, a second geographic decoration</h1>
+    <p class="subtitle">
+      Same "outside the fence" decoration family as the river (<code>DecorationType.RIVER</code>),
+      built from the same visual materials &mdash; ink outlines, the rock palette
+      from the river's spring, the reed/canopy greens. A rocky den sits on
+      whichever border edge the player places it; every so often a bear pops
+      her head out to look around, then ducks back in.
+    </p>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-head"><h2>Cave den, with a bear that peeks</h2></div>
+      <p class="desc">Rocky mound with a grass cap and a dark entrance, flanked by two "doorpost" boulders (same rock shape as the river spring). The bear rises out of the dark, looks side to side, and retreats &mdash; clipped to the entrance opening so she genuinely reads as emerging from inside it, not popping up in front of it.</p>
+      <p class="anim-note">Preview cycle sped way up for review &mdash; see the timeline + note below for the real pacing</p>
+      <div class="stage">
+        <canvas id="stage" width="560" height="380"></canvas>
+        <div class="hud" id="hud">hidden</div>
+      </div>
+      <div class="row">
+        <span>Border edge:</span>
+        <button data-side="TOP">Top</button>
+        <button data-side="RIGHT">Right</button>
+        <button data-side="BOTTOM">Bottom</button>
+        <button data-side="LEFT">Left</button>
+      </div>
+      <div class="row"><button id="expandBtn">Expand grid</button><span id="sizeLabel">6 &times; 8</span></div>
+      <div class="timeline" id="timeline">
+        <div class="seg" data-p="hidden"><span></span></div>
+        <div class="seg" data-p="rising"><span></span></div>
+        <div class="seg" data-p="peeking"><span></span></div>
+        <div class="seg" data-p="sinking"><span></span></div>
+      </div>
+      <div class="row" style="justify-content: space-between;">
+        <span class="lbl">hidden (60&ndash;300s in-game)</span>
+        <span class="lbl">rise</span>
+        <span class="lbl">peek</span>
+        <span class="lbl">sink</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Palette &amp; materials reuse</h2></div>
+      <p class="desc">Nothing new here except the bear's own fur tones &mdash; everything else is pulled straight from assets already shipping in <code>FarmGridCanvas.kt</code>, so the den reads as built from the same world as the river and the fence.</p>
+      <div class="swatches">
+        <div class="swatch-row"><span class="swatch" style="background:#3a332b"></span>Ink outline &mdash; shared by every asset</div>
+        <div class="swatch-row"><span class="swatch" style="background:#8f8477"></span>Boulder grey &mdash; river spring's <code>drawRock</code>, reused as-is</div>
+        <div class="swatch-row"><span class="swatch" style="background:#6d5638"></span>Packed-earth mound &mdash; fence post brown</div>
+        <div class="swatch-row"><span class="swatch" style="background:#558b2f"></span>Grass cap &mdash; river reed green</div>
+        <div class="swatch-row"><span class="swatch" style="background:#7a5230"></span>Bear fur &mdash; new, warm brown so she doesn't read as "the cow"</div>
+        <div class="swatch-row"><span class="swatch" style="background:#d9b48f"></span>Bear snout &mdash; new, tan</div>
+      </div>
+      <p class="desc" style="margin-top:6px;">Try the 4 edge buttons and "Expand grid" &mdash; the den re-anchors to <code>side</code> + <code>alongFraction</code> exactly like the river, so it always stays just outside the new fence line.</p>
+    </div>
+  </div>
+
+  <p class="note">
+    <b>Real pacing (not shown at preview speed):</b> the bear is hidden for a
+    random 1&ndash;5 real minutes, same kill-safe timestamp pattern as
+    <code>CowHunger</code>/<code>AnimalLifespan</code> &mdash; a stored
+    <code>lastDuckedAtTimestamp</code> + a randomly-rolled
+    <code>nextPeekDelayMs</code> (60_000&ndash;300_000), with phase/progress
+    recomputed from elapsed time every frame rather than a live countdown, so
+    she doesn't lose her place if the app is backgrounded mid-peek. Rise/hold/
+    sink (&asymp;0.5s / 1.8s / 0.5s) stay fixed regardless of the random gap.
+    Purely decorative, same as the river &mdash; no tap target, no gameplay effect.
+  </p>
+  <footer>Farm Math Builder — internal asset preview, not shipped UI</footer>
+</main>
+
+<script>
+"use strict";
+
+const TILE_W = 112, TILE_H = 60;
+const INK = "#3a332b";
+const CREAM = "#fffaf0";
+
+function isoXY(gx, gy) {
+  return { x: (gx - gy) * TILE_W / 2, y: (gx + gy) * TILE_H / 2 };
+}
+
+function groundColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return [cs.getPropertyValue("--ground-a").trim(), cs.getPropertyValue("--ground-b").trim()];
+}
+
+function gridBounds(cols, rows) {
+  const minX = isoXY(0, rows - 1).x;
+  const maxX = isoXY(cols - 1, 0).x;
+  const minY = isoXY(0, 0).y;
+  const maxY = isoXY(cols - 1, rows - 1).y;
+  return { cx: -(minX + maxX) / 2, cy: -(minY + maxY) / 2 };
+}
+
+function drawGround(ctx, ox, oy, cols, rows) {
+  const [ga, gb] = groundColors();
+  for (let gy = 0; gy < rows; gy++) {
+    for (let gx = 0; gx < cols; gx++) {
+      const p = isoXY(gx, gy);
+      const x = ox + p.x, y = oy + p.y;
+      ctx.beginPath();
+      ctx.moveTo(x, y - TILE_H / 2);
+      ctx.lineTo(x + TILE_W / 2, y);
+      ctx.lineTo(x, y + TILE_H / 2);
+      ctx.lineTo(x - TILE_W / 2, y);
+      ctx.closePath();
+      ctx.fillStyle = (gx + gy) % 2 === 0 ? ga : gb;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.08)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+}
+
+function fencePoint(col, row, cols, rows) {
+  const fenceCol = col + (col === 0 ? -0.5 : col === cols - 1 ? 0.5 : 0);
+  const fenceRow = row + (row === 0 ? -0.5 : row === rows - 1 ? 0.5 : 0);
+  return isoXY(fenceCol, fenceRow);
+}
+
+function perimeterCells(cols, rows) {
+  const pts = [];
+  for (let c = 0; c < cols; c++) pts.push([c, 0]);
+  for (let r = 1; r < rows; r++) pts.push([cols - 1, r]);
+  for (let c = cols - 2; c >= 0; c--) pts.push([c, rows - 1]);
+  for (let r = rows - 2; r >= 1; r--) pts.push([0, r]);
+  return pts;
+}
+
+function drawFence(ctx, ox, oy, cols, rows) {
+  const pts = perimeterCells(cols, rows).map(([c, r]) => fencePoint(c, r, cols, rows));
+  ctx.strokeStyle = "#8a6a42";
+  ctx.lineWidth = 3.5;
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  for (let i = 0; i <= pts.length; i++) {
+    const p = pts[i % pts.length];
+    const x = ox + p.x, y = oy + p.y - 12;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.fillStyle = "#6d5638";
+  for (const p of pts) {
+    const x = ox + p.x, y = oy + p.y;
+    ctx.fillRect(x - 3.5, y - 20, 7, 20);
+  }
+}
+
+function groundShadow(ctx, x, y, rx, ry) {
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, rx);
+  grad.addColorStop(0, "rgba(35,26,15,0.4)");
+  grad.addColorStop(0.7, "rgba(35,26,15,0.2)");
+  grad.addColorStop(1, "rgba(35,26,15,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRock(ctx, x, y, r, rot) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  ctx.moveTo(-r, r * 0.3);
+  ctx.lineTo(-r * 0.5, -r * 0.7);
+  ctx.lineTo(r * 0.3, -r);
+  ctx.lineTo(r, -r * 0.1);
+  ctx.lineTo(r * 0.6, r * 0.6);
+  ctx.lineTo(-r * 0.2, r * 0.8);
+  ctx.closePath();
+  ctx.fillStyle = "#8f8477";
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.5, -r * 0.7);
+  ctx.lineTo(r * 0.3, -r);
+  ctx.lineTo(r * 0.1, -r * 0.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.6;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawGrassTuft(ctx, x, y, scale, palette) {
+  const blades = [
+    { dx: -4, h: 12, tilt: -4 },
+    { dx: 0, h: 16, tilt: 1 },
+    { dx: 4, h: 11, tilt: 5 }
+  ];
+  blades.forEach((b, i) => {
+    ctx.strokeStyle = palette[i % palette.length];
+    ctx.lineWidth = 2.2 * scale;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x + b.dx * scale, y);
+    ctx.quadraticCurveTo(
+      x + (b.dx + b.tilt) * scale, y - (b.h * 0.6) * scale,
+      x + (b.dx + b.tilt * 1.6) * scale, y - b.h * scale
+    );
+    ctx.stroke();
+  });
+}
+
+// ---------- Cave mound ----------
+// A bumpy earth-and-rock hill (overlapping blobs, same "flat shape + ink
+// outline" grammar as every other asset) with a dark arched entrance cut
+// into its lower-front face, flanked by two doorpost boulders (the river
+// spring's own drawRock) and capped with a few grass tufts along the ridge.
+// Always drawn in one fixed frontal orientation, like the barn mesh — only
+// its ground anchor moves with `side`/`alongFraction`, it never rotates.
+const MOUND_W = 150, MOUND_H = 92;
+const MOUTH_W = 58, MOUTH_H = 78, MOUTH_CX = 6, MOUTH_TOP = -70;
+
+function drawCaveMound(ctx, x, y) {
+  groundShadow(ctx, x, y + 8, MOUND_W * 0.55, MOUND_H * 0.3);
+
+  // hill silhouette: several overlapping domes, darker at the base for depth
+  const blobs = [
+    { dx: -46, dy: -10, r: 46, c: "#7c6a52" },
+    { dx: 40, dy: -6, r: 50, c: "#6d5c46" },
+    { dx: -6, dy: -34, r: 58, c: "#8a7860" },
+    { dx: 4, dy: -8, r: 40, c: "#6d5638" }
+  ];
+  for (const b of blobs) {
+    ctx.fillStyle = b.c;
+    ctx.beginPath();
+    ctx.ellipse(x + b.dx, y + b.dy, b.r, b.r * 0.82, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(x - MOUND_W / 2, y + 6);
+  ctx.quadraticCurveTo(x - MOUND_W / 2, y - MOUND_H, x, y - MOUND_H - 6);
+  ctx.quadraticCurveTo(x + MOUND_W / 2, y - MOUND_H, x + MOUND_W / 2, y + 6);
+  ctx.stroke();
+
+  // entrance: dark arch cut into the lower-front face
+  const mx = x + MOUTH_CX, myTop = y + MOUTH_TOP;
+  ctx.beginPath();
+  ctx.moveTo(mx - MOUTH_W / 2, y);
+  ctx.lineTo(mx - MOUTH_W / 2, myTop + MOUTH_W / 2);
+  ctx.arc(mx, myTop + MOUTH_W / 2, MOUTH_W / 2, Math.PI, 0);
+  ctx.lineTo(mx + MOUTH_W / 2, y);
+  ctx.closePath();
+  const mouthGrad = ctx.createLinearGradient(mx, myTop, mx, y);
+  mouthGrad.addColorStop(0, "#0c0906");
+  mouthGrad.addColorStop(1, "#241c14");
+  ctx.fillStyle = mouthGrad;
+  ctx.fill();
+  ctx.strokeStyle = "#4a3a26";
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // doorpost boulders
+  drawRock(ctx, mx - MOUTH_W / 2 - 14, y - 6, 20, -0.25);
+  drawRock(ctx, mx + MOUTH_W / 2 + 12, y - 10, 22, 0.3);
+  drawRock(ctx, x - MOUND_W / 2 + 10, y + 4, 12, 0.6);
+
+  // grass cap along the ridge
+  const grassPalette = ["#558b2f", "#689f38", "#43a047"];
+  drawGrassTuft(ctx, x - 44, y - MOUND_H + 22, 1, grassPalette);
+  drawGrassTuft(ctx, x + 4, y - MOUND_H - 2, 1.1, grassPalette);
+  drawGrassTuft(ctx, x + 50, y - MOUND_H + 26, 0.9, grassPalette);
+
+  return { mx, myTop, mouthW: MOUTH_W, mouthH: MOUTH_H, mouthFloorY: y };
+}
+
+// ---------- Bear head ----------
+// Same chibi proportions/ink language as the cow (round head, big eyes,
+// snout patch) but in a warm brown so she never reads as "the cow again".
+function drawBearHead(ctx, x, y, lookT) {
+  const wobble = Math.sin(lookT * 1.6) * 7;
+  ctx.save();
+  ctx.translate(x + wobble * 0.3, y);
+  ctx.rotate(wobble * 0.01);
+
+  const fur = "#7a5230", furDark = "#5f3f23", snout = "#d9b48f";
+
+  // ears
+  ctx.fillStyle = fur;
+  [-19, 19].forEach((ex) => {
+    ctx.beginPath();
+    ctx.ellipse(ex, -24, 11, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
+  });
+  ctx.fillStyle = "#5f3f23";
+  [-19, 19].forEach((ex) => {
+    ctx.beginPath();
+    ctx.ellipse(ex, -24, 5.5, 5.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // head
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 30, 28, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.stroke();
+
+  // snout
+  ctx.fillStyle = snout;
+  ctx.beginPath();
+  ctx.ellipse(0, 12, 15, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = INK; ctx.lineWidth = 1.8; ctx.stroke();
+
+  // nose
+  ctx.fillStyle = INK;
+  ctx.beginPath();
+  ctx.ellipse(0, 6, 4.5, 3.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // eyes (a slow blink)
+  const blink = Math.max(0, Math.sin(lookT * 3.1)) < 0.06 ? 0.15 : 1;
+  ctx.fillStyle = INK;
+  [-11, 11].forEach((exx) => {
+    ctx.beginPath();
+    ctx.ellipse(exx, -4, 3.1, 3.1 * blink, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
+
+function drawBearPaws(ctx, cx, y, spread) {
+  ctx.fillStyle = "#7a5230";
+  [-spread, spread].forEach((dx) => {
+    ctx.beginPath();
+    ctx.ellipse(cx + dx, y, 9, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK; ctx.lineWidth = 1.8; ctx.stroke();
+  });
+}
+
+// ---------- Peek state machine ----------
+// hidden -> rising -> peeking -> sinking -> hidden. In-game, `hidden` lasts a
+// random 60_000-300_000ms (kill-safe timestamp, see the note in the page);
+// this preview compresses it to a few seconds so the loop is watchable.
+const HIDDEN_MS = 2600, RISE_MS = 480, HOLD_MS = 1700, SINK_MS = 480;
+const CYCLE_MS = HIDDEN_MS + RISE_MS + HOLD_MS + SINK_MS;
+
+function easeOutBack(t) {
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+function easeInCubic(t) { return t * t * t; }
+
+function peekState(ms) {
+  const local = ms % CYCLE_MS;
+  if (local < HIDDEN_MS) return { phase: "hidden", p: 0, local };
+  let x = local - HIDDEN_MS;
+  if (x < RISE_MS) return { phase: "rising", p: Math.min(1, easeOutBack(x / RISE_MS)), local };
+  x -= RISE_MS;
+  if (x < HOLD_MS) return { phase: "peeking", p: 1, local, holdT: x / 1000 };
+  x -= HOLD_MS;
+  return { phase: "sinking", p: Math.max(0, 1 - easeInCubic(x / SINK_MS)), local };
+}
+
+function drawDen(ctx, x, y, nowMs) {
+  const mouth = drawCaveMound(ctx, x, y);
+  const state = peekState(nowMs);
+
+  // Clip to the entrance opening so the head genuinely reads as emerging
+  // from inside the dark, not sliding up in front of the mound.
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(mouth.mx - mouth.mouthW / 2, mouth.mouthFloorY);
+  ctx.lineTo(mouth.mx - mouth.mouthW / 2, mouth.myTop + mouth.mouthW / 2);
+  ctx.arc(mouth.mx, mouth.myTop + mouth.mouthW / 2, mouth.mouthW / 2, Math.PI, 0);
+  ctx.lineTo(mouth.mx + mouth.mouthW / 2, mouth.mouthFloorY);
+  ctx.closePath();
+  ctx.clip();
+
+  // p=0 -> head center well below the entrance floor (fully hidden in the
+  // dark). p=1 -> head center near the entrance's upper third (ears/eyes/
+  // snout all visible, chin near the rim) — a "peek", not a full exit.
+  const hiddenY = mouth.mouthFloorY + 46;
+  const peekY = mouth.myTop + mouth.mouthW * 0.42;
+  const headY = hiddenY + (peekY - hiddenY) * state.p;
+  const lookT = state.phase === "peeking" ? (state.holdT || 0) : 0;
+
+  if (state.p > 0.05) drawBearHead(ctx, mouth.mx, headY, lookT);
+  if (state.phase === "peeking" && state.holdT > 0.25) {
+    drawBearPaws(ctx, mouth.mx, mouth.mouthFloorY - 6, 21);
+  }
+  ctx.restore();
+
+  return state;
+}
+
+// ---------- Placement: side + alongFraction, same shape as the river ----------
+function denPositionGrid(side, alongFraction, cols, rows) {
+  const perp = -1.5; // fixed small distance outside the border, any side
+  const alongCols = alongFraction * (cols - 1);
+  const alongRows = alongFraction * (rows - 1);
+  switch (side) {
+    case "TOP": return { x: alongCols, y: perp };
+    case "BOTTOM": return { x: alongCols, y: (rows - 1) - perp };
+    case "LEFT": return { x: perp, y: alongRows };
+    case "RIGHT": return { x: (cols - 1) - perp, y: alongRows };
+  }
+}
+
+const SIZE_PROGRESSION = [
+  { cols: 6, rows: 8 },
+  { cols: 8, rows: 10 },
+  { cols: 10, rows: 12 },
+  { cols: 12, rows: 14 }
+];
+
+function setupStage() {
+  const canvas = document.getElementById("stage");
+  const ctx = canvas.getContext("2d");
+  const hud = document.getElementById("hud");
+  const segs = Array.from(document.querySelectorAll("#timeline .seg span"));
+  const sizeLabel = document.getElementById("sizeLabel");
+  let sizeIdx = 0;
+  let side = "LEFT";
+  let alongFraction = 0.55;
+  const startTime = performance.now();
+
+  document.querySelectorAll("[data-side]").forEach((btn) => {
+    if (btn.dataset.side === side) btn.classList.add("active");
+    btn.addEventListener("click", () => {
+      side = btn.dataset.side;
+      document.querySelectorAll("[data-side]").forEach((b) => b.classList.toggle("active", b === btn));
+    });
+  });
+  document.getElementById("expandBtn").addEventListener("click", () => {
+    sizeIdx = (sizeIdx + 1) % SIZE_PROGRESSION.length;
+    const { cols, rows } = SIZE_PROGRESSION[sizeIdx];
+    sizeLabel.textContent = `${cols} × ${rows}`;
+  });
+
+  function render(now) {
+    const { cols, rows } = SIZE_PROGRESSION[sizeIdx];
+    const ms = now - startTime;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const { cx, cy } = gridBounds(cols, rows);
+    const scaleFactor = 0.6;
+    const ox = (canvas.width / 2) / scaleFactor + cx;
+    const oy = (canvas.height / 2 + 40) / scaleFactor + cy;
+    ctx.save();
+    ctx.scale(scaleFactor, scaleFactor);
+    drawGround(ctx, ox, oy, cols, rows);
+    drawFence(ctx, ox, oy, cols, rows);
+    const g = denPositionGrid(side, alongFraction, cols, rows);
+    const p = isoXY(g.x, g.y);
+    const state = drawDen(ctx, ox + p.x, oy + p.y, ms);
+    ctx.restore();
+
+    hud.textContent = state.phase;
+    const local = state.local;
+    segs.forEach((s) => {
+      const name = s.parentElement.dataset.p;
+      const bounds = { hidden: [0, HIDDEN_MS], rising: [HIDDEN_MS, HIDDEN_MS + RISE_MS],
+        peeking: [HIDDEN_MS + RISE_MS, HIDDEN_MS + RISE_MS + HOLD_MS],
+        sinking: [HIDDEN_MS + RISE_MS + HOLD_MS, CYCLE_MS] }[name];
+      const frac = local < bounds[0] ? 0 : local > bounds[1] ? 1 : (local - bounds[0]) / (bounds[1] - bounds[0]);
+      s.style.transform = `scaleX(${frac})`;
+    });
+
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+}
+
+setupStage();
+</script>

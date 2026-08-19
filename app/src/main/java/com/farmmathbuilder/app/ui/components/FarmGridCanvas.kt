@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -28,7 +29,6 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale as drawScale
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.farmmathbuilder.app.data.entity.DecorationEntity
 import com.farmmathbuilder.app.domain.AnimalGrowthStage
@@ -74,8 +74,7 @@ fun FarmGridCanvas(
     val tileWidthDp = 56f
     val tileHeightDp = 30f
 
-    val context = LocalContext.current
-    val barnTriangles = remember { BarnMesh.load(context) }
+    val barnTriangles = remember { BarnMesh.load() }
 
     // One independent wandering state per owned cow (see CowWanderState/
     // rememberCowWanderState below) — each cow gets its own free-floating
@@ -197,15 +196,18 @@ fun FarmGridCanvas(
         drawRect(color = Color(0xFF9CCC65), size = size)
 
         // Player-placed map decorations (founder request 2026-08-18: "accidentes
-        // geográficos" shop — only RIVER exists today, drawn with the same river +
-        // woods backdrop art, docs/previews/river-woods-preview.html). Each one's
-        // position is stored relative (border side + fraction along it, see
-        // DecorationEntity's doc) and re-projected onto gridConfig.cols/rows every
-        // frame, exactly like the fence posts — so it always sits outside the
-        // buildable ring and stays in the same relative spot as the map expands,
-        // never overlapping a playable cell. Drawn before every gameplay element
-        // (cells, barn, cow, fence) so it always renders as background, underneath
-        // them.
+        // geográficos" shop — RIVER and CAVE today, docs/previews/river-woods-preview.html
+        // and docs/previews/cave-bear-preview.html). Each one's position is stored
+        // relative (border side + fraction along it, see DecorationEntity's doc)
+        // and re-projected onto gridConfig.cols/rows every frame, exactly like the
+        // fence posts — so it always sits outside the buildable ring and stays in
+        // the same relative spot as the map expands, never overlapping a playable
+        // cell. Drawn before every gameplay element (cells, barn, cow, fence, all
+        // below) so decorations can never render on top of the fence (founder
+        // request 2026-08-18: "las vallas siempre han de quedar encima de los
+        // accidentes geográficos") — this loop always runs first, unconditionally,
+        // not through the depth-sorted painter's-algorithm list those use, so
+        // there's no depth value to get wrong here the way the barn's briefly did.
         for (decoration in decorations) {
             when (decoration.type) {
                 DecorationType.RIVER -> drawRiverAndWoodsBackdrop(
@@ -219,6 +221,18 @@ fun FarmGridCanvas(
                     side = decoration.side,
                     alongFraction = decoration.alongFraction,
                     animMs = riverAnimMs
+                )
+                DecorationType.CAVE -> drawCaveAndBear(
+                    originOffset = originOffset,
+                    canvasCenter = canvasCenter,
+                    scale = scale,
+                    pan = pan,
+                    tileW = tileW,
+                    tileH = tileH,
+                    gridConfig = gridConfig,
+                    side = decoration.side,
+                    alongFraction = decoration.alongFraction,
+                    decorationId = decoration.id
                 )
             }
         }
@@ -282,9 +296,10 @@ fun FarmGridCanvas(
         // every frame — same live-recompute pattern as the river/woods backdrop
         // and the fence itself — so it stays centered and attached to the fence
         // through every map expansion with no persisted anchor to migrate. Still
-        // the original real parsed/flat-shaded 3D barn.obj mesh (precomputed once
-        // in BarnMesh, not per-frame, per founder request to keep that model):
-        // each triangle's normalized (tile-relative) offsets are scaled by tileW
+        // the "Grand Timber Frame Barn" — a procedurally-built, flat-shaded 3D
+        // mesh (precomputed once in BarnMesh, not per-frame, per founder
+        // request to keep that model): each triangle's normalized (tile-
+        // relative) offsets are scaled by tileW
         // (uniformly for both axes — see BarnMesh doc for why) and the current
         // scale, then filled in the mesh's precomputed back-to-front order.
         val barnCol = gridConfig.cols / 2f - 0.5f
@@ -380,17 +395,22 @@ fun FarmGridCanvas(
         // True painter's-algorithm ordering across *every* depth-sorted object in
         // the scene — barn, every cow, and each individual fence segment —
         // collected into one (depth, drawAction) list and painted back-to-front.
-        // This replaces an earlier two-step approach (barn-vs-cow dispatch, then
-        // the fence always painted last over both) that broke down for the
-        // fence's far edges: a segment on the row=0/col=0 side sits at a
-        // *smaller* col+row than the barn and should render behind it, but
-        // "always last" painted it over the barn's roof regardless (founder
-        // screenshot: the back fence line cutting across the roof peak instead
-        // of disappearing behind it). Depth convention matches GridMath.isoY:
-        // larger col+row is further down-screen, i.e. nearer the camera, i.e.
-        // painted later.
+        // Depth convention matches GridMath.isoY: larger col+row is further
+        // down-screen, i.e. nearer the camera, i.e. painted later.
+        //
+        // The barn's own depth is deliberately NOT its actual barnCol+barnRow
+        // position any more: now that it lives permanently outside/south of the
+        // fence (see drawBarn's doc), it should always paint in front of the
+        // *entire* fence ring, corners included — but a corner post's depth is
+        // inflated by being offset on both axes at once (col+0.5 AND row+0.5),
+        // so it can exceed barnCol+barnRow even though the corner isn't actually
+        // any nearer the camera than the rest of the south edge (founder
+        // screenshot 2026-08-18: a corner post slicing across the barn's roof).
+        // cols+rows is always >= every fenceDepth() value below (whose max is
+        // exactly cols+rows-1, at the bottom-right corner), so this guarantees
+        // the barn wins against every fence segment unconditionally.
         val depthDrawables = mutableListOf<Pair<Float, () -> Unit>>()
-        depthDrawables.add((barnCol + barnRow) to drawBarn)
+        depthDrawables.add((gridConfig.cols + gridConfig.rows).toFloat() to drawBarn)
         for ((cow, state) in cowRenders) {
             if (state.col >= 0f) depthDrawables.add((state.col + state.row) to drawCowAt(cow, state))
         }
@@ -849,6 +869,261 @@ private fun riverPathGrid(cols: Int, rows: Int, side: DecorationSide, alongFract
             DecorationSide.LEFT -> Offset(perp, along)
             DecorationSide.RIGHT -> Offset((cols - 1) - perp, along)
         }
+    }
+}
+
+/**
+ * Cave & bear backdrop (founder-approved design, docs/previews/cave-bear-preview.html):
+ * a rocky den with a dark arched entrance; a bear periodically rises up out of
+ * the dark to look around, then retreats back inside. Position comes from
+ * [side]/[alongFraction] exactly like the river (see DecorationEntity), so it
+ * stays outside the fence and in the same relative spot through every map
+ * expansion. The peek timing is fully stateless/kill-safe: [decorationId]
+ * deterministically picks a fixed hidden-duration between 1 and 5 real minutes
+ * (see caveHiddenDurationMs) and the phase is recomputed every frame purely
+ * from elapsed wall-clock time modulo that cycle — nothing to lose if the app
+ * is backgrounded mid-peek, same idea as CowHunger/AnimalLifespan's timestamp
+ * pattern, just with no persisted state at all since the "random" pick only
+ * needs to be stable, not re-rolled.
+ */
+private fun DrawScope.drawCaveAndBear(
+    originOffset: Offset,
+    canvasCenter: Offset,
+    scale: Float,
+    pan: Offset,
+    tileW: Float,
+    tileH: Float,
+    gridConfig: GridConfig,
+    side: DecorationSide,
+    alongFraction: Float,
+    decorationId: Int
+) {
+    fun toScreen(col: Float, row: Float): Offset {
+        val bx = originOffset.x + GridMath.isoX(col, row, tileW)
+        val by = originOffset.y + GridMath.isoY(col, row, tileH)
+        return Offset(
+            (bx - canvasCenter.x) * scale + canvasCenter.x + pan.x,
+            (by - canvasCenter.y) * scale + canvasCenter.y + pan.y
+        )
+    }
+
+    val anchorGrid = caveAnchorGrid(side, alongFraction, gridConfig.cols, gridConfig.rows)
+    val anchor = toScreen(anchorGrid.x, anchorGrid.y)
+    // Preview art (docs/previews/cave-bear-preview.html) was tuned against a
+    // 112px reference tile width — same "1 tile-width = 1 unit" convention the
+    // fence/cow/river already use.
+    val unitScale = (tileW * scale) / 112f
+    fun u(v: Float) = v * unitScale
+
+    val mouth = drawCaveMound(anchor, unitScale)
+
+    val hiddenMs = caveHiddenDurationMs(decorationId)
+    val riseMs = 500L
+    val holdMs = 1800L
+    val sinkMs = 500L
+    val cycleMs = hiddenMs + riseMs + holdMs + sinkMs
+    val local = System.currentTimeMillis().mod(cycleMs)
+    val riseEnd = hiddenMs + riseMs
+    val holdEnd = riseEnd + holdMs
+    val p: Float
+    val holdT: Float
+    when {
+        local < hiddenMs -> {
+            p = 0f; holdT = 0f
+        }
+        local < riseEnd -> {
+            p = easeOutBack((local - hiddenMs) / riseMs.toFloat()).coerceIn(0f, 1f); holdT = 0f
+        }
+        local < holdEnd -> {
+            p = 1f; holdT = (local - riseEnd) / 1000f
+        }
+        else -> {
+            p = (1f - easeInCubic((local - holdEnd) / sinkMs.toFloat())).coerceIn(0f, 1f); holdT = 0f
+        }
+    }
+
+    clipPath(mouth.clip) {
+        val hiddenY = mouth.floorY + u(46f)
+        val peekY = mouth.topY + mouth.mouthW * 0.42f
+        val headY = hiddenY + (peekY - hiddenY) * p
+        if (p > 0.05f) drawBearHead(Offset(mouth.mouthCx, headY), unitScale, holdT)
+        if (local in (riseEnd + 250)..holdEnd) {
+            drawBearPaws(Offset(mouth.mouthCx, mouth.floorY - u(6f)), unitScale, u(21f))
+        }
+    }
+}
+
+/** Deterministic per-decoration "random" pick of the bear's hidden duration,
+ * uniformly in [1, 5] real minutes — a fixed hash of [decorationId] rather
+ * than re-rolled/persisted state, so it's stable across recompositions and
+ * process death with nothing to save or restore. */
+private fun caveHiddenDurationMs(decorationId: Int): Long {
+    val hash = Math.floorMod(decorationId.toLong() * 2654435761L, 240_000L)
+    return 60_000L + hash
+}
+
+private fun easeOutBack(t: Float): Float {
+    val c1 = 1.70158f
+    val c3 = c1 + 1f
+    val m = t - 1f
+    return 1f + c3 * (m * m * m) + c1 * (m * m)
+}
+
+private fun easeInCubic(t: Float): Float = t * t * t
+
+/** Same relative-placement shape as the river: [side] + how far [alongFraction]
+ * along it (0..1), with a fixed small perpendicular distance outside the
+ * border. Unlike the river's path, the cave is a single point, so there's no
+ * bow/fade interpolation — just the side-to-axis mapping. */
+private fun caveAnchorGrid(side: DecorationSide, alongFraction: Float, cols: Int, rows: Int): Offset {
+    val perp = -1.5f
+    val f = alongFraction.coerceIn(0f, 1f)
+    val alongCols = f * (cols - 1)
+    val alongRows = f * (rows - 1)
+    return when (side) {
+        DecorationSide.TOP -> Offset(alongCols, perp)
+        DecorationSide.BOTTOM -> Offset(alongCols, (rows - 1) - perp)
+        DecorationSide.LEFT -> Offset(perp, alongRows)
+        DecorationSide.RIGHT -> Offset((cols - 1) - perp, alongRows)
+    }
+}
+
+private data class CaveMouthGeometry(val mouthCx: Float, val topY: Float, val mouthW: Float, val floorY: Float, val clip: Path)
+
+/** Rocky den mound: overlapping earth/rock domes (same "flat shape + ink
+ * outline" grammar as every other asset) with a dark arched entrance cut into
+ * the lower-front face, flanked by two doorpost boulders (reusing
+ * [drawRiverRock] as-is) and capped with a few grass tufts (reusing
+ * [drawRiverReed]'s blade-scatter technique). [anchor] is the mound's
+ * ground-level floor-center point (same "diamond center" convention every
+ * other tile element uses). Always drawn in one fixed frontal orientation
+ * regardless of which border edge it's placed on — like the barn mesh, only
+ * its anchor point moves, it never rotates. */
+private fun DrawScope.drawCaveMound(anchor: Offset, unitScale: Float): CaveMouthGeometry {
+    fun u(v: Float) = v * unitScale
+    val x = anchor.x
+    val y = anchor.y
+
+    drawSoftGroundShadow(Offset(x, y + u(8f)), u(150f) * 0.55f, u(92f) * 0.3f)
+
+    val blobs = listOf(
+        Triple(-46f, -10f, 46f) to Color(0xFF7C6A52),
+        Triple(40f, -6f, 50f) to Color(0xFF6D5C46),
+        Triple(-6f, -34f, 58f) to Color(0xFF8A7860),
+        Triple(4f, -8f, 40f) to Color(0xFF6D5638)
+    )
+    for ((geo, color) in blobs) {
+        val (dx, dy, r) = geo
+        val rx = u(r)
+        val ry = u(r) * 0.82f
+        drawOval(
+            color = color,
+            topLeft = Offset(x + u(dx) - rx, y + u(dy) - ry),
+            size = Size(rx * 2f, ry * 2f)
+        )
+    }
+
+    val moundW = 150f
+    val moundH = 92f
+    val silhouette = Path().apply {
+        moveTo(x - u(moundW / 2f), y + u(6f))
+        quadraticTo(x - u(moundW / 2f), y - u(moundH), x, y - u(moundH + 6f))
+        quadraticTo(x + u(moundW / 2f), y - u(moundH), x + u(moundW / 2f), y + u(6f))
+    }
+    drawPath(silhouette, color = Color(0xFF3A332B), style = Stroke(width = u(2.2f)))
+
+    val mouthW = 58f
+    val mx = x + u(6f)
+    val myTop = y + u(-70f)
+    val archCenterY = myTop + u(mouthW / 2f)
+    val archRadius = u(mouthW / 2f)
+    val clip = Path().apply {
+        moveTo(mx - archRadius, y)
+        lineTo(mx - archRadius, archCenterY)
+        arcTo(
+            rect = Rect(
+                left = mx - archRadius,
+                top = archCenterY - archRadius,
+                right = mx + archRadius,
+                bottom = archCenterY + archRadius
+            ),
+            startAngleDegrees = 180f,
+            sweepAngleDegrees = 180f,
+            forceMoveTo = false
+        )
+        lineTo(mx + archRadius, y)
+        close()
+    }
+    val mouthGradient = Brush.linearGradient(
+        colorStops = arrayOf(0f to Color(0xFF0C0906), 1f to Color(0xFF241C14)),
+        start = Offset(mx, myTop),
+        end = Offset(mx, y)
+    )
+    drawPath(clip, brush = mouthGradient)
+    drawPath(clip, color = Color(0xFF4A3A26), style = Stroke(width = u(5f)))
+    drawPath(clip, color = Color(0xFF3A332B), style = Stroke(width = u(2f)))
+
+    drawRiverRock(Offset(mx - archRadius - u(14f), y - u(6f)), u(20f), -0.25f)
+    drawRiverRock(Offset(mx + archRadius + u(12f), y - u(10f)), u(22f), 0.3f)
+    drawRiverRock(Offset(x - u(moundW / 2f) + u(10f), y + u(4f)), u(12f), 0.6f)
+
+    val grassPalette = listOf(Color(0xFF558B2F), Color(0xFF689F38), Color(0xFF43A047))
+    drawRiverReed(Offset(x - u(44f), y - u(moundH) + u(22f)), unitScale, grassPalette)
+    drawRiverReed(Offset(x + u(4f), y - u(moundH) - u(2f)), unitScale * 1.1f, grassPalette)
+    drawRiverReed(Offset(x + u(50f), y - u(moundH) + u(26f)), unitScale * 0.9f, grassPalette)
+
+    return CaveMouthGeometry(mouthCx = mx, topY = myTop, mouthW = archRadius * 2f, floorY = y, clip = clip)
+}
+
+/** Chibi bear head — same proportions/ink language as [drawWanderingCow]'s
+ * head but in warm bear-brown so she never reads as "the cow again". [anchor]
+ * is the head's center; [lookT] (seconds into the "peeking" hold, 0 outside
+ * that phase) drives a gentle side-to-side look and an occasional blink. */
+private fun DrawScope.drawBearHead(anchor: Offset, unitScale: Float, lookT: Float) {
+    fun u(v: Float) = v * unitScale
+    val fur = Color(0xFF7A5230)
+    val furDark = Color(0xFF5F3F23)
+    val snout = Color(0xFFD9B48F)
+    val ink = Color(0xFF3A332B)
+
+    val wobble = kotlin.math.sin(lookT * 1.6f) * u(7f)
+    val cx = anchor.x + wobble * 0.3f
+    val cy = anchor.y
+
+    for (ex in floatArrayOf(-19f, 19f)) {
+        val center = Offset(cx + u(ex), cy - u(24f))
+        drawOval(color = fur, topLeft = center - Offset(u(11f), u(11f)), size = Size(u(22f), u(22f)))
+        drawOval(color = ink, topLeft = center - Offset(u(11f), u(11f)), size = Size(u(22f), u(22f)), style = Stroke(u(2f)))
+        drawOval(color = furDark, topLeft = center - Offset(u(5.5f), u(5.5f)), size = Size(u(11f), u(11f)))
+    }
+
+    drawOval(color = fur, topLeft = Offset(cx - u(30f), cy - u(28f)), size = Size(u(60f), u(56f)))
+    drawOval(color = ink, topLeft = Offset(cx - u(30f), cy - u(28f)), size = Size(u(60f), u(56f)), style = Stroke(u(2.4f)))
+
+    val snoutCenter = Offset(cx, cy + u(12f))
+    drawOval(color = snout, topLeft = snoutCenter - Offset(u(15f), u(11f)), size = Size(u(30f), u(22f)))
+    drawOval(color = ink, topLeft = snoutCenter - Offset(u(15f), u(11f)), size = Size(u(30f), u(22f)), style = Stroke(u(1.8f)))
+
+    drawOval(color = ink, topLeft = Offset(cx - u(4.5f), cy + u(6f) - u(3.4f)), size = Size(u(9f), u(6.8f)))
+
+    val blinking = kotlin.math.max(0f, kotlin.math.sin(lookT * 3.1f)) < 0.06f
+    val blink = if (blinking) 0.15f else 1f
+    for (ex in floatArrayOf(-11f, 11f)) {
+        drawOval(
+            color = ink,
+            topLeft = Offset(cx + u(ex) - u(3.1f), cy - u(4f) - u(3.1f) * blink),
+            size = Size(u(6.2f), u(6.2f) * blink)
+        )
+    }
+}
+
+private fun DrawScope.drawBearPaws(anchor: Offset, unitScale: Float, spread: Float) {
+    val fur = Color(0xFF7A5230)
+    val ink = Color(0xFF3A332B)
+    for (dx in floatArrayOf(-spread, spread)) {
+        val center = Offset(anchor.x + dx, anchor.y)
+        drawOval(color = fur, topLeft = center - Offset(unitScale * 9f, unitScale * 6f), size = Size(unitScale * 18f, unitScale * 12f))
+        drawOval(color = ink, topLeft = center - Offset(unitScale * 9f, unitScale * 6f), size = Size(unitScale * 18f, unitScale * 12f), style = Stroke(unitScale * 1.8f))
     }
 }
 

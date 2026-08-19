@@ -81,7 +81,8 @@ enum class AnimalGrowthStage {
  * outside the fenced play area. Only RIVER exists today, but the type/table are
  * already shaped for more, same "one enum, room to grow" pattern as [AnimalType]. */
 enum class DecorationType {
-    RIVER
+    RIVER,
+    CAVE
 }
 
 /** Which border edge a [DecorationType] is attached to — see DecorationEntity.

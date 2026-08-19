@@ -87,6 +87,12 @@ fun FarmScreen(
             viewModel.consumeDecorationSnackbar()
         }
     }
+    LaunchedEffect(uiState.dailyMissionSnackbar) {
+        uiState.dailyMissionSnackbar?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeDailyMissionSnackbar()
+        }
+    }
     // Fires for both a single harvest and "harvest all" — both set this same field
     // on success, so one hook covers both entry points.
     LaunchedEffect(uiState.showHarvestCelebrationForCellId) {

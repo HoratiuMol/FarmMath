@@ -46,6 +46,15 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
             if (resetHappened) {
                 _uiState.value = _uiState.value.copy(dailyResetSnackbar = true)
             }
+            // Founder request: remind the player every time the app opens
+            // (cold start) if today's daily math mission is still unclaimed —
+            // not just the completion toast, a nudge beforehand too. Reuses
+            // the same dailyMissionSnackbar field/LaunchedEffect as the
+            // completion message (mutually exclusive moments, so no conflict).
+            val player = repository.currentPlayer()
+            if (player != null && !player.dailyMissionClaimed) {
+                _uiState.value = _uiState.value.copy(dailyMissionSnackbar = dailyMissionReminderMessage())
+            }
             observeState()
         }
         viewModelScope.launch {
@@ -53,7 +62,7 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                 delay(1000)
                 val now = System.currentTimeMillis()
                 ticker.value = now
-                // Cow lifespan (founder request): 20 real minutes after spawning, a
+                // Cow lifespan (founder request): 2 real days after spawning, a
                 // cow dies and is removed — checked at the same 1s cadence as
                 // growth/hunger recompute. See AnimalLifespan/FarmRepository.removeDeadAnimals.
                 val dead = repository.removeDeadAnimals(now)
@@ -384,8 +393,11 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                 }
                 _uiState.value = _uiState.value.copy(lastAnswerCorrect = correct)
             } else {
-                repository.recordExerciseResult(correct)
-                _uiState.value = _uiState.value.copy(lastAnswerCorrect = correct)
+                val missionCompleted = repository.recordExerciseResult(correct)
+                _uiState.value = _uiState.value.copy(
+                    lastAnswerCorrect = correct,
+                    dailyMissionSnackbar = if (missionCompleted) dailyMissionCompleteMessage() else _uiState.value.dailyMissionSnackbar
+                )
             }
         }
     }
@@ -404,6 +416,24 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
             exercisePurposeCellId = null,
             lastAnswerCorrect = null
         )
+    }
+
+    /** Daily math mission (gameplay push: "misión del día") — solve
+     * [FarmRepository.DAILY_MISSION_TARGET] problems today, from either the
+     * casual or Challenge flow, for a one-time bonus (see
+     * FarmRepository.recordExerciseResult/recordChallengeAnswer/
+     * applyDailyMission). This message is shared by both flows. */
+    private fun dailyMissionCompleteMessage(): String =
+        "🎯 Daily mission complete! +${FarmRepository.DAILY_MISSION_STAR_BONUS} ⭐ bonus"
+
+    /** Shown once per app open (see init above) while today's mission is
+     * still unclaimed — a nudge, not a scold: no penalty is implied, it just
+     * names the reward waiting for them. */
+    private fun dailyMissionReminderMessage(): String =
+        "🎯 Today's math mission: solve ${FarmRepository.DAILY_MISSION_TARGET} for +${FarmRepository.DAILY_MISSION_STAR_BONUS} ⭐!"
+
+    fun consumeDailyMissionSnackbar() {
+        _uiState.value = _uiState.value.copy(dailyMissionSnackbar = null)
     }
 
     // ---------- Dedicated "10 in a row" Challenge (separate from the flow above) ----------
@@ -426,9 +456,14 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
         val exercise = _uiState.value.activeChallengeExercise ?: return
         val correct = answer == exercise.correctAnswer
         viewModelScope.launch {
-            repository.recordChallengeAnswer(correct)
+            val missionCompleted = repository.recordChallengeAnswer(correct)
+            val missionSnackbar = if (missionCompleted) dailyMissionCompleteMessage() else _uiState.value.dailyMissionSnackbar
             if (!correct) {
-                _uiState.value = _uiState.value.copy(challengeLastAnswerCorrect = false, challengeFailed = true)
+                _uiState.value = _uiState.value.copy(
+                    challengeLastAnswerCorrect = false,
+                    challengeFailed = true,
+                    dailyMissionSnackbar = missionSnackbar
+                )
                 return@launch
             }
             val newCount = _uiState.value.challengeCorrectCount + 1
@@ -437,10 +472,15 @@ class FarmViewModel(private val repository: FarmRepository) : ViewModel() {
                 _uiState.value = _uiState.value.copy(
                     challengeCorrectCount = newCount,
                     challengeLastAnswerCorrect = true,
-                    challengeCompletedBonusFields = bonus
+                    challengeCompletedBonusFields = bonus,
+                    dailyMissionSnackbar = missionSnackbar
                 )
             } else {
-                _uiState.value = _uiState.value.copy(challengeCorrectCount = newCount, challengeLastAnswerCorrect = true)
+                _uiState.value = _uiState.value.copy(
+                    challengeCorrectCount = newCount,
+                    challengeLastAnswerCorrect = true,
+                    dailyMissionSnackbar = missionSnackbar
+                )
             }
         }
     }

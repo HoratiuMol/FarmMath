@@ -20,6 +20,10 @@ data class FarmUiState(
     /** Non-null: this exercise reduces this cell's growth time instead of granting an extra field. */
     val exercisePurposeCellId: Int? = null,
     val lastAnswerCorrect: Boolean? = null,
+    /** Non-null right after solving a correct answer (casual or Challenge
+     * flow) that pushed exercisesSolvedToday past the daily math mission's
+     * target — see FarmViewModel.dailyMissionCompleteMessage. */
+    val dailyMissionSnackbar: String? = null,
     val showHarvestCelebrationForCellId: Int? = null,
     val dailyResetSnackbar: Boolean = false,
     val noSlotsSnackbar: Boolean = false,

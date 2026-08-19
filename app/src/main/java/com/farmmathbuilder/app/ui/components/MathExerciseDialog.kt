@@ -2,6 +2,7 @@ package com.farmmathbuilder.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -41,70 +43,82 @@ fun MathExerciseDialog(
     onClose: () -> Unit
 ) {
     Dialog(onDismissRequest = onClose) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                if (isTimeReduction) "Solve to save 1 minute!" else "Solve to unlock a field!",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(Modifier.height(16.dp))
-            val symbol = when (exercise.operation) {
-                MathOperation.ADD -> "+"
-                MathOperation.SUBTRACT -> "-"
-                MathOperation.MULTIPLY -> "×"
-                MathOperation.DIVIDE -> "÷"
-            }
-            Text(
-                "${exercise.operandA} $symbol ${exercise.operandB} = ?",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(20.dp))
+        Box {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    if (isTimeReduction) "Solve to save 1 minute!" else "Solve to unlock a field!",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(8.dp))
+                MathMascot(state = lastAnswerCorrect, modifier = Modifier.size(72.dp))
+                Spacer(Modifier.height(8.dp))
+                val symbol = when (exercise.operation) {
+                    MathOperation.ADD -> "+"
+                    MathOperation.SUBTRACT -> "-"
+                    MathOperation.MULTIPLY -> "×"
+                    MathOperation.DIVIDE -> "÷"
+                }
+                Text(
+                    "${exercise.operandA} $symbol ${exercise.operandB} = ?",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(20.dp))
 
-            val rows = exercise.choices.chunked(2)
-            for (row in rows) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    for (choice in row) {
-                        Button(
-                            onClick = { onAnswer(choice) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .aspectRatio(2f),
-                            enabled = lastAnswerCorrect != true
-                        ) {
-                            Text("$choice", style = MaterialTheme.typography.titleMedium)
+                val rows = exercise.choices.chunked(2)
+                for (row in rows) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        for (choice in row) {
+                            Button(
+                                onClick = { onAnswer(choice) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(2f),
+                                enabled = lastAnswerCorrect != true
+                            ) {
+                                Text("$choice", style = MaterialTheme.typography.titleMedium)
+                            }
                         }
                     }
+                    Spacer(Modifier.height(12.dp))
                 }
-                Spacer(Modifier.height(12.dp))
+
+                when (lastAnswerCorrect) {
+                    true -> {
+                        Text(
+                            if (isTimeReduction) {
+                                "🎉 Correct! -1 minute of growth time."
+                            } else {
+                                "🎉 Correct! +1 extra field today, +1 ⭐"
+                            },
+                            color = Color(0xFF2E7D32)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = onClose) { Text("Nice!") }
+                    }
+                    false -> {
+                        Text("Not quite — try again!", color = Color(0xFFC62828))
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = onNext) { Text("Try another") }
+                    }
+                    null -> {
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = onClose) { Text("Close") }
+                    }
+                }
             }
 
-            when (lastAnswerCorrect) {
-                true -> {
-                    Text(
-                        if (isTimeReduction) "🎉 Correct! -1 minute of growth time." else "🎉 Correct! +1 extra field today.",
-                        color = Color(0xFF2E7D32)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = onClose) { Text("Nice!") }
-                }
-                false -> {
-                    Text("Not quite — try again!", color = Color(0xFFC62828))
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = onNext) { Text("Try another") }
-                }
-                null -> {
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = onClose) { Text("Close") }
-                }
+            if (lastAnswerCorrect == true) {
+                ConfettiOverlay(onFinished = {}, modifier = Modifier.matchParentSize())
             }
         }
     }

@@ -18,7 +18,7 @@ import com.farmmathbuilder.app.data.entity.SettingsEntity
 
 @Database(
     entities = [CellEntity::class, PlayerEntity::class, SettingsEntity::class, AnimalEntity::class, DecorationEntity::class],
-    version = 10,
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

@@ -226,6 +226,11 @@ class FarmRepository(
                 freeFieldsUsedToday = 0,
                 extraFieldsEarnedToday = 0,
                 extraFieldsUsedToday = 0,
+                // exercisesSolvedToday/dailyMissionClaimed previously weren't
+                // reset here despite the "Today" name — a pre-existing gap
+                // that made the daily math mission below unable to repeat.
+                exercisesSolvedToday = 0,
+                dailyMissionClaimed = false,
                 lastDailyResetTimestamp = now
             )
         )
@@ -489,20 +494,39 @@ class FarmRepository(
     /** Casual single-exercise-for-a-field flow (the yellow calculator FAB):
      * +1 extra field per correct answer, no bonus packs — those now live
      * entirely in the separate 10-exercise Challenge flow below, per founder
-     * request that the two not be entangled into one continuous dialog. */
-    suspend fun recordExerciseResult(correct: Boolean) {
-        val p = playerDao.get() ?: return
-        updatePlayer(
-            if (correct) {
-                p.copy(
-                    extraFieldsEarnedToday = p.extraFieldsEarnedToday + 1,
-                    exercisesSolvedToday = p.exercisesSolvedToday + 1,
-                    currentStreak = p.currentStreak + 1
-                )
-            } else {
-                p.copy(currentStreak = 0)
-            }
+     * request that the two not be entangled into one continuous dialog.
+     * Returns true if this answer just completed today's daily math mission
+     * (see [applyDailyMission]), so the caller can surface a celebration. */
+    suspend fun recordExerciseResult(correct: Boolean): Boolean {
+        val p = playerDao.get() ?: return false
+        if (!correct) {
+            updatePlayer(p.copy(currentStreak = 0))
+            return false
+        }
+        val updated = p.copy(
+            extraFieldsEarnedToday = p.extraFieldsEarnedToday + 1,
+            exercisesSolvedToday = p.exercisesSolvedToday + 1,
+            currentStreak = p.currentStreak + 1,
+            mathStars = p.mathStars + 1
         )
+        val (finalPlayer, missionCompleted) = applyDailyMission(updated)
+        updatePlayer(finalPlayer)
+        return missionCompleted
+    }
+
+    /** Grants the daily math mission's one-time bonus the moment
+     * [candidate]'s exercisesSolvedToday first reaches [DAILY_MISSION_TARGET]
+     * — shared by both [recordExerciseResult] and [recordChallengeAnswer] so
+     * either flow can complete it. Returns the (possibly bonus-adjusted)
+     * player alongside whether this call is the one that completed it. */
+    private fun applyDailyMission(candidate: PlayerEntity): Pair<PlayerEntity, Boolean> {
+        if (candidate.dailyMissionClaimed || candidate.exercisesSolvedToday < DAILY_MISSION_TARGET) {
+            return candidate to false
+        }
+        return candidate.copy(
+            dailyMissionClaimed = true,
+            mathStars = candidate.mathStars + DAILY_MISSION_STAR_BONUS
+        ) to true
     }
 
     /**
@@ -515,17 +539,23 @@ class FarmRepository(
      * only reward is the lump [grantChallengeBonus] pack on full completion.
      * Still updates the shared `exercisesSolvedToday`/`currentStreak` stats so
      * the Stats dialog and any future streak UI stay consistent regardless of
-     * which flow the player used.
+     * which flow the player used. Returns true if this answer just completed
+     * today's daily math mission (see [applyDailyMission]).
      */
-    suspend fun recordChallengeAnswer(correct: Boolean) {
-        val p = playerDao.get() ?: return
-        updatePlayer(
-            if (correct) {
-                p.copy(exercisesSolvedToday = p.exercisesSolvedToday + 1, currentStreak = p.currentStreak + 1)
-            } else {
-                p.copy(currentStreak = 0)
-            }
+    suspend fun recordChallengeAnswer(correct: Boolean): Boolean {
+        val p = playerDao.get() ?: return false
+        if (!correct) {
+            updatePlayer(p.copy(currentStreak = 0))
+            return false
+        }
+        val updated = p.copy(
+            exercisesSolvedToday = p.exercisesSolvedToday + 1,
+            currentStreak = p.currentStreak + 1,
+            mathStars = p.mathStars + 1
         )
+        val (finalPlayer, missionCompleted) = applyDailyMission(updated)
+        updatePlayer(finalPlayer)
+        return missionCompleted
     }
 
     /** Grants a completed challenge attempt's reward: a random
@@ -537,7 +567,12 @@ class FarmRepository(
     suspend fun grantChallengeBonus(): Int {
         val p = playerDao.get() ?: return 0
         val bonus = Random.nextInt(CHALLENGE_BONUS_MIN, CHALLENGE_BONUS_MAX + 1)
-        updatePlayer(p.copy(extraFieldsEarnedToday = p.extraFieldsEarnedToday + bonus))
+        updatePlayer(
+            p.copy(
+                extraFieldsEarnedToday = p.extraFieldsEarnedToday + bonus,
+                mathStars = p.mathStars + CHALLENGE_COMPLETE_STAR_BONUS
+            )
+        )
         return bonus
     }
 
@@ -671,8 +706,15 @@ class FarmRepository(
         const val CARROT_UNLOCK_WHEAT_HARVESTS = 50
         /** Founder request: the dedicated Challenge is this many consecutive correct answers. */
         const val EXERCISE_STREAK_CHALLENGE_LENGTH = 10
+        /** Daily math mission (gameplay push: "misión del día"): solve this many
+         * correct answers today, from either flow, to earn [DAILY_MISSION_STAR_BONUS]. */
+        const val DAILY_MISSION_TARGET = 3
+        const val DAILY_MISSION_STAR_BONUS = 3
         const val CHALLENGE_BONUS_MIN = 5
         const val CHALLENGE_BONUS_MAX = 10
+        /** Extra mathStars on top of the usual +1-per-answer, awarded once when
+         * a full 10-in-a-row Challenge attempt completes. */
+        const val CHALLENGE_COMPLETE_STAR_BONUS = 5
         /** Founder request: a cow costs 20 wheat. */
         const val COW_COST = 20
         const val COW_BASE_CAP = 5

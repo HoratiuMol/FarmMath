@@ -26,7 +26,7 @@ private data class ConfettiPiece(val angle: Float, val speed: Float, val color: 
  * Purely programmatic — no image assets required.
  */
 @Composable
-fun ConfettiOverlay(onFinished: () -> Unit) {
+fun ConfettiOverlay(onFinished: () -> Unit, modifier: Modifier = Modifier.fillMaxSize()) {
     val colors = listOf(
         Color(0xFFFFC107), Color(0xFF8BC34A), Color(0xFF29B6F6), Color(0xFFFF7043), Color(0xFFAB47BC)
     )
@@ -53,7 +53,7 @@ fun ConfettiOverlay(onFinished: () -> Unit) {
         onFinished()
     }
 
-    Canvas(modifier = Modifier.fillMaxSize()) {
+    Canvas(modifier = modifier) {
         val cx = size.width / 2f
         val cy = size.height / 2f
         for (p in pieces) {

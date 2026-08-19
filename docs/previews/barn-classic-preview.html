@@ -1,0 +1,449 @@
+<title>Five Classic Barns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4efe2; --panel: #fbf8f0; --panel-2: #eee7d5; --ink: #241f16;
+    --muted: #746b57; --line: #e0d6bd; --accent: #a63d2a; --accent-ink: #fff8f1;
+    --ground-a: #efe9db; --ground-b: #e6ddc7;
+    --shadow: 0 1px 2px rgba(36, 31, 22, 0.06), 0 8px 20px -12px rgba(36, 31, 22, 0.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17140e; --panel: #201b13; --panel-2: #292217; --ink: #f1e9d6;
+      --muted: #a89a7d; --line: #382f20; --accent: #e0764f; --accent-ink: #241207;
+      --ground-a: #1c1710; --ground-b: #241e14;
+      --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 10px 24px -12px rgba(0,0,0,0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17140e; --panel: #201b13; --panel-2: #292217; --ink: #f1e9d6;
+    --muted: #a89a7d; --line: #382f20; --accent: #e0764f; --accent-ink: #241207;
+    --ground-a: #1c1710; --ground-b: #241e14;
+    --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 10px 24px -12px rgba(0,0,0,0.55);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4efe2; --panel: #fbf8f0; --panel-2: #eee7d5; --ink: #241f16;
+    --muted: #746b57; --line: #e0d6bd; --accent: #a63d2a; --accent-ink: #fff8f1;
+    --ground-a: #efe9db; --ground-b: #e6ddc7;
+    --shadow: 0 1px 2px rgba(36,31,22,0.06), 0 8px 20px -12px rgba(36,31,22,0.25);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Public Sans", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1240px; margin: 0 auto; padding: 48px 28px 72px; }
+  header { display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px; max-width: 78ch; }
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif; font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.06; margin: 0; font-weight: 600; text-wrap: balance; letter-spacing: -0.01em;
+  }
+  .subtitle { color: var(--muted); font-size: 14.5px; line-height: 1.6; margin: 0; }
+  .subtitle code {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px;
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+  }
+  .rig {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 16px; margin-bottom: 24px; box-shadow: var(--shadow);
+  }
+  .rig .stat {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .rig label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  input[type="range"] { accent-color: var(--accent); width: 130px; }
+  .rig .val {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    min-width: 3.6ch; color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow);
+  }
+  .card-head { display: flex; flex-direction: column; gap: 3px; }
+  .card-idx {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px;
+    color: var(--accent); letter-spacing: 0.06em;
+  }
+  .card-head h2 {
+    font-family: "Fraunces", Georgia, serif; font-size: 19px; margin: 0;
+    font-weight: 600; letter-spacing: -0.005em;
+  }
+  .card-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+  .stage { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--ground-a); }
+  canvas { display: block; width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+  .swatch-chip {
+    display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  .swatch-dot { width: 13px; height: 13px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.18); }
+  .note {
+    font-size: 12.5px; color: var(--muted); line-height: 1.65;
+    border-top: 1px solid var(--line); padding-top: 16px; margin-top: 34px; max-width: 78ch;
+  }
+  .note code {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+  }
+  footer { margin-top: 24px; font-size: 11.5px; color: var(--muted); text-align: center; }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Farm Math Builder &middot; Asset Concept</span>
+    <h1>Five classic barns</h1>
+    <p class="subtitle">
+      One template this time, not five: a rectangular body, a gable (or
+      gambrel) roof, a hayloft door, a sliding door, a stone footing &mdash;
+      the shape every player already reads as "barn." All five share that
+      same simple mesh; what tells them apart is material, trim, and the
+      small working details a real barn accretes over decades.
+    </p>
+  </header>
+
+  <div class="rig">
+    <span class="stat" id="statsTag"></span>
+    <label>Turntable <input id="yawSlider" type="range" min="0" max="360" step="1" value="35" /></label>
+    <span class="val" id="yawVal">35&deg;</span>
+    <label>Light <input id="lightSlider" type="range" min="0" max="360" step="1" value="55" /></label>
+    <span class="val" id="lightVal">55&deg;</span>
+  </div>
+
+  <div class="grid" id="cardGrid"></div>
+
+  <p class="note">
+    Still concept meshes, not drop-in assets &mdash; the live barn is a
+    Wings3D export (<code>barn.obj</code>, 1,657 verts). Whichever one reads
+    best would get a proper modeling pass before it replaces
+    <code>domain/BarnMesh.kt</code>'s asset.
+  </p>
+
+  <footer>Farm Math Builder &middot; docs/previews/barn-classic-preview.html</footer>
+</main>
+
+<script>
+// ---------- vector + shading helpers ----------
+function sub(a,b){ return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]; }
+function cross(u,v){ return [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]; }
+function dot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function len(v){ return Math.hypot(v[0],v[1],v[2]) || 1; }
+function normalize(v){ const l=len(v); return [v[0]/l,v[1]/l,v[2]/l]; }
+function faceNormal(a,b,c){ return normalize(cross(sub(b,a), sub(c,a))); }
+function rotateY(p,a){ const c=Math.cos(a), s=Math.sin(a); return [p[0]*c+p[2]*s, p[1], -p[0]*s+p[2]*c]; }
+function rotateX(p,a){ const c=Math.cos(a), s=Math.sin(a); return [p[0], p[1]*c-p[2]*s, p[1]*s+p[2]*c]; }
+function shade(color, brightness){
+  const b = Math.max(0.28, Math.min(1.15, brightness));
+  return `rgb(${Math.min(255,Math.round(color[0]*b))},${Math.min(255,Math.round(color[1]*b))},${Math.min(255,Math.round(color[2]*b))})`;
+}
+function hex(c){ return '#' + c.map(x => x.toString(16).padStart(2,'0')).join('').toUpperCase(); }
+
+// ---------- procedural mesh builders (auto-orient via a reference point
+// known to sit inside the solid, so hand-picked vertex winding never has to
+// be verified face by face) ----------
+function addTriAuto(tris, a, b, c, color, ref){
+  const n = faceNormal(a,b,c);
+  const fc = [(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3];
+  if (dot(n, sub(fc, ref)) < 0) tris.push({a:a,b:c,c:b,color});
+  else tris.push({a:a,b:b,c:c,color});
+}
+function addQuadAuto(tris, p0,p1,p2,p3, color, ref){
+  addTriAuto(tris,p0,p1,p2,color,ref);
+  addTriAuto(tris,p0,p2,p3,color,ref);
+}
+function box(tris, cx,cy,cz, boxW,boxH,boxD, color, skipTop){
+  const x0=cx-boxW/2,x1=cx+boxW/2, y0=cy-boxH/2,y1=cy+boxH/2, z0=cz-boxD/2,z1=cz+boxD/2;
+  const a=[x0,y0,z0], b=[x1,y0,z0], c=[x1,y1,z0], d=[x0,y1,z0];
+  const e=[x0,y0,z1], f=[x1,y0,z1], g=[x1,y1,z1], h=[x0,y1,z1];
+  const ref=[cx,cy,cz];
+  addQuadAuto(tris,e,f,g,h,color,ref);
+  addQuadAuto(tris,b,a,d,c,color,ref);
+  addQuadAuto(tris,a,e,h,d,color,ref);
+  addQuadAuto(tris,f,b,c,g,color,ref);
+  // top face omitted when a roof sits flush on it (skipTop) — coplanar with
+  // the roof's eave line, it's always fully hidden underneath, and keeping
+  // it around risks a depth-sort tie flashing it through the ridge.
+  if (!skipTop) addQuadAuto(tris,d,h,g,c,color,ref);
+  addQuadAuto(tris,a,b,f,e,color,ref);
+}
+// profilePts: [x,y] polyline, left eave -> ...ridge points... -> right eave,
+// both eaves at the same y (sits flush on a box's wall-top). Produces the
+// sloped roof faces plus fan-triangulated gable ends.
+function gabledRoof(tris, cx,cz, profilePts, z0,z1, roofColor, gableColor, ref){
+  const n = profilePts.length;
+  for (let i=0;i<n-1;i++){
+    const a=[cx+profilePts[i][0], profilePts[i][1], z0];
+    const b=[cx+profilePts[i+1][0], profilePts[i+1][1], z0];
+    const c=[cx+profilePts[i+1][0], profilePts[i+1][1], z1];
+    const d=[cx+profilePts[i][0], profilePts[i][1], z1];
+    addQuadAuto(tris,a,b,c,d,roofColor,ref);
+  }
+  for (const zz of [z0,z1]){
+    const p0=[cx+profilePts[0][0], profilePts[0][1], zz];
+    for (let i=1;i<n-1;i++){
+      const pi=[cx+profilePts[i][0], profilePts[i][1], zz];
+      const pi1=[cx+profilePts[i+1][0], profilePts[i+1][1], zz];
+      addTriAuto(tris,p0,pi,pi1,gableColor,ref);
+    }
+  }
+}
+// a thin coplanar accent panel (door, vent, hoist track...) sitting just
+// proud of a wall/gable face so it never z-fights with it.
+function panel(tris, cx,cy,cz, w,h, axis, color){
+  const ref = [cx,cy,cz];
+  if (axis === 'z'){
+    addQuadAuto(tris, [cx-w/2,cy-h/2,cz],[cx+w/2,cy-h/2,cz],[cx+w/2,cy+h/2,cz],[cx-w/2,cy+h/2,cz], color, [cx,cy,cz-0.05]);
+  }
+}
+
+// ---------- shared barn template ----------
+// Every design calls this with the same bones (wall box, gable/gambrel
+// roof, footing, sliding door) and only varies dimensions/colors/details —
+// keeping the five meshes structurally consistent, not five different
+// buildings.
+function buildBarn(opts){
+  const tris = [];
+  const {
+    wallW=2.7, wallH=1.9, wallD=2.1,
+    roofProfile, roofColor, gableColor,
+    wallColor, footColor, doorColor, trimColor,
+    hasCupola=false, cupolaColor, cupolaRoofColor, vaneColor,
+    hasHoist=false, hoistColor,
+    hasVent=false, ventColor,
+    loftDoorColor,
+    windowColor
+  } = opts;
+
+  const wallTop = wallH/2;
+  const wallBottom = -wallH/2;
+
+  // footing
+  box(tris, 0, wallBottom-0.1, 0, wallW+0.2, 0.2, wallD+0.2, footColor);
+  // walls (top face skipped — always hidden under the roof, see box())
+  box(tris, 0, 0, 0, wallW, wallH, wallD, wallColor, true);
+  // roof
+  gabledRoof(tris, 0, 0, roofProfile, -wallD/2, wallD/2, roofColor, gableColor, [0, wallTop*0.6, 0]);
+
+  // big sliding door, front face (z = +wallD/2)
+  panel(tris, 0, wallBottom+0.62, wallD/2+0.001, wallW*0.42, 1.24, 'z', doorColor);
+  if (trimColor){
+    // door track rail above the door
+    box(tris, 0, wallBottom+1.27, wallD/2+0.03, wallW*0.5, 0.06, 0.06, trimColor);
+  }
+  if (windowColor){
+    panel(tris, -wallW*0.32, wallTop*0.15, wallD/2+0.001, 0.26, 0.34, 'z', windowColor);
+    panel(tris, wallW*0.32, wallTop*0.15, wallD/2+0.001, 0.26, 0.34, 'z', windowColor);
+  }
+
+  // gable-face detail: either a hayloft door or a louvered vent, centered
+  // in the triangle above the wall top.
+  const gablePeakY = Math.max(...roofProfile.map(p => p[1]));
+  const detailY = wallTop + (gablePeakY - wallTop) * 0.42;
+  if (loftDoorColor){
+    panel(tris, 0, detailY, wallD/2+0.001, 0.62, 0.62, 'z', loftDoorColor);
+  } else if (hasVent){
+    panel(tris, 0, detailY, wallD/2+0.001, 0.42, 0.3, 'z', ventColor);
+  }
+
+  // hay hoist beam: a small track arm poking out from the peak, classic on
+  // gambrel barns used to winch loose hay into the loft.
+  if (hasHoist){
+    box(tris, 0, gablePeakY-0.06, wallD/2+0.32, 0.1, 0.1, 0.6, hoistColor);
+  }
+
+  // cupola + vane on the ridge
+  if (hasCupola){
+    box(tris, 0, gablePeakY+0.32, 0, 0.5, 0.42, 0.5, cupolaColor);
+    box(tris, 0, gablePeakY+0.62, 0, 0.6, 0.14, 0.6, cupolaRoofColor);
+    box(tris, 0, gablePeakY+0.92, 0, 0.045, 0.42, 0.045, vaneColor);
+    addTriAuto(tris, [0,gablePeakY+1.1,0],[0.28,gablePeakY+1.02,0],[0,gablePeakY+1.02,0.22], vaneColor, [0,gablePeakY+1.05,0.07]);
+  }
+
+  return tris;
+}
+
+const DESIGNS = [
+  {
+    name: 'Barn Red Classic',
+    desc: 'The archetype: barn red with white trim, black shingles, cupola and vane on the ridge, hayloft door square over the big door.',
+    opts: {
+      roofProfile: [[-1.4,0.95],[0,1.7],[1.4,0.95]],
+      wallColor:[0x8C,0x2F,0x22], roofColor:[0x2B,0x2B,0x2B], gableColor:[0x2B,0x2B,0x2B],
+      footColor:[0x7D,0x76,0x69], doorColor:[0x3A,0x2A,0x1C], trimColor:[0xF3,0xEE,0xDD],
+      loftDoorColor:[0xF3,0xEE,0xDD],
+      hasCupola:true, cupolaColor:[0xF3,0xEE,0xDD], cupolaRoofColor:[0x2B,0x2B,0x2B], vaneColor:[0x17,0x15,0x12]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Trim','trimColor'],['Door','doorColor']]
+  },
+  {
+    name: 'White Dairy Barn',
+    desc: 'Clapboard white, dark green shingles, a louvered vent instead of a loft door, twin hayloft windows — the New England dairy read.',
+    opts: {
+      roofProfile: [[-1.4,0.95],[0,1.65],[1.4,0.95]],
+      wallColor:[0xF2,0xEE,0xDD], roofColor:[0x2F,0x5C,0x3A], gableColor:[0x2F,0x5C,0x3A],
+      footColor:[0x6E,0x69,0x5C], doorColor:[0x2B,0x33,0x28], trimColor:null,
+      hasVent:true, ventColor:[0x24,0x2B,0x21],
+      windowColor:[0x24,0x2B,0x21]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Door','doorColor'],['Windows','windowColor']]
+  },
+  {
+    name: 'Weathered Timber Barn',
+    desc: 'Sun-greyed board siding, a rusted tin roof, a patched plank door — no fresh paint in decades, still standing.',
+    opts: {
+      roofProfile: [[-1.4,0.95],[0,1.6],[1.4,0.95]],
+      wallColor:[0x8A,0x7A,0x63], roofColor:[0xA5,0x52,0x2C], gableColor:[0xA5,0x52,0x2C],
+      footColor:[0x63,0x5C,0x4E], doorColor:[0x4B,0x3F,0x30], trimColor:[0x6B,0x5D,0x49],
+      hasVent:true, ventColor:[0x3A,0x32,0x27]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Door','doorColor'],['Foundation','footColor']]
+  },
+  {
+    name: 'Gambrel Hay Barn',
+    desc: 'Deep burgundy walls, a true two-pitch gambrel for maximum loft volume, a hoist beam over the door for winching loose hay up.',
+    opts: {
+      wallH: 1.7,
+      roofProfile: [[-1.4,0.85],[-1.0,1.35],[0,1.7],[1.0,1.35],[1.4,0.85]],
+      wallColor:[0x6E,0x24,0x30], roofColor:[0x36,0x36,0x36], gableColor:[0xED,0xE6,0xD3],
+      footColor:[0x7D,0x76,0x69], doorColor:[0x3A,0x2A,0x1C], trimColor:[0xED,0xE6,0xD3],
+      loftDoorColor:[0xED,0xE6,0xD3],
+      hasHoist:true, hoistColor:[0x3A,0x2A,0x1C],
+      hasCupola:true, cupolaColor:[0xED,0xE6,0xD3], cupolaRoofColor:[0x36,0x36,0x36], vaneColor:[0x17,0x15,0x12]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Gable trim','gableColor'],['Hoist','hoistColor']]
+  },
+  {
+    name: 'Painted Ochre Barn',
+    desc: 'Warm mustard walls with cream trim and a brown shingle roof — a golden-hour palette, still the same simple frame underneath.',
+    opts: {
+      roofProfile: [[-1.4,0.95],[0,1.68],[1.4,0.95]],
+      wallColor:[0xC9,0x86,0x3A], roofColor:[0x5B,0x3A,0x2A], gableColor:[0x5B,0x3A,0x2A],
+      footColor:[0x7D,0x76,0x69], doorColor:[0x3A,0x2A,0x1C], trimColor:[0xF1,0xE8,0xD3],
+      loftDoorColor:[0xF1,0xE8,0xD3],
+      hasHoist:true, hoistColor:[0x3A,0x2A,0x1C]
+    },
+    legend: [['Walls','wallColor'],['Roof','roofColor'],['Trim','trimColor'],['Hoist','hoistColor']]
+  }
+];
+
+DESIGNS.forEach(d => { d.tris = buildBarn(d.opts); });
+
+// ---------- shared render rig ----------
+let totalTris = 0;
+DESIGNS.forEach(d => totalTris += d.tris.length);
+document.getElementById('statsTag').textContent = DESIGNS.length + ' concepts · ' + totalTris + ' triangles total';
+
+const grid = document.getElementById('cardGrid');
+const cards = DESIGNS.map((design, i) => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const legendHtml = design.legend
+    .filter(([, key]) => design.opts[key])
+    .map(([label, key]) => {
+      const c = design.opts[key];
+      return `<span class="swatch-chip"><span class="swatch-dot" style="background:${hex(c)}"></span>${label} ${hex(c)}</span>`;
+    }).join('');
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="card-idx">0${i + 1}</span>
+      <h2>${design.name}</h2>
+    </div>
+    <p class="card-desc">${design.desc}</p>
+    <div class="stage"><canvas width="620" height="460"></canvas></div>
+    <div class="legend">${legendHtml}</div>
+  `;
+  grid.appendChild(card);
+  const canvas = card.querySelector('canvas');
+  return { canvas, ctx: canvas.getContext('2d'), tris: design.tris };
+});
+
+const yawSlider = document.getElementById('yawSlider');
+const yawVal = document.getElementById('yawVal');
+const lightSlider = document.getElementById('lightSlider');
+const lightVal = document.getElementById('lightVal');
+const pitch = 0.56;
+
+function drawGround(ctx, canvas){
+  const style = getComputedStyle(document.documentElement);
+  const a = style.getPropertyValue('--ground-a').trim();
+  const bcol = style.getPropertyValue('--ground-b').trim();
+  ctx.fillStyle = a;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle = bcol;
+  ctx.lineWidth = 1;
+  const step = 34;
+  for (let x=-canvas.height; x<canvas.width+canvas.height; x+=step){
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+canvas.height,canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,canvas.height); ctx.lineTo(x+canvas.height,0); ctx.stroke();
+  }
+}
+
+function bounds(tris){
+  let min=[Infinity,Infinity,Infinity], max=[-Infinity,-Infinity,-Infinity];
+  for (const t of tris) for (const v of [t.a,t.b,t.c]) for (let k=0;k<3;k++){
+    if (v[k]<min[k]) min[k]=v[k];
+    if (v[k]>max[k]) max[k]=v[k];
+  }
+  const center=[0,1,2].map(k=>(min[k]+max[k])/2);
+  const extent=Math.max(...[0,1,2].map(k=>max[k]-min[k]));
+  return { center, extent };
+}
+
+function project(p, center, extent, yaw, canvas, scale){
+  let v = sub(p, center);
+  v = rotateY(v, yaw);
+  v = rotateX(v, pitch);
+  const s = (scale * Math.min(canvas.width, canvas.height)) / extent;
+  return { x: canvas.width/2 + v[0]*s, y: canvas.height*0.66 - v[1]*s, z: v[2] };
+}
+
+function renderAll(){
+  const yawDeg = parseFloat(yawSlider.value);
+  yawVal.textContent = Math.round(yawDeg) + '°';
+  const yaw = (yawDeg*Math.PI)/180;
+  const lightDeg = parseFloat(lightSlider.value);
+  lightVal.textContent = Math.round(lightDeg) + '°';
+  const lightRad = (lightDeg*Math.PI)/180;
+  const lightDir = normalize([Math.cos(lightRad), 0.9, Math.sin(lightRad)]);
+
+  for (const { canvas, ctx, tris } of cards){
+    drawGround(ctx, canvas);
+    const { center, extent } = bounds(tris);
+    const drawList = [];
+    for (const t of tris){
+      const pa = project(t.a, center, extent, yaw, canvas, 0.46);
+      const pb = project(t.b, center, extent, yaw, canvas, 0.46);
+      const pc = project(t.c, center, extent, yaw, canvas, 0.46);
+      const depth = (pa.z+pb.z+pc.z)/3;
+      const normal = faceNormal(t.a,t.b,t.c);
+      const facing = rotateX(rotateY(normal, yaw), pitch);
+      const brightness = 0.35 + Math.max(0, dot(facing, lightDir))*0.85;
+      drawList.push({ pa,pb,pc, color:t.color, brightness, depth });
+    }
+    drawList.sort((x,y) => x.depth - y.depth);
+    for (const t of drawList){
+      ctx.beginPath();
+      ctx.moveTo(t.pa.x, t.pa.y);
+      ctx.lineTo(t.pb.x, t.pb.y);
+      ctx.lineTo(t.pc.x, t.pc.y);
+      ctx.closePath();
+      ctx.fillStyle = shade(t.color, t.brightness);
+      ctx.fill();
+    }
+  }
+}
+
+yawSlider.addEventListener('input', renderAll);
+lightSlider.addEventListener('input', renderAll);
+renderAll();
+</script>

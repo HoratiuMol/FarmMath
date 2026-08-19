@@ -98,6 +98,11 @@ fun TopHud(player: PlayerEntity?, modifier: Modifier = Modifier) {
         val free = player?.freeFieldsUsedToday ?: 0
         HudChip(emoji = "🌱", value = "$free/5", accent = GrassGreenDark)
 
+        // Math stars — earned only by solving exercises (casual + Challenge),
+        // deliberately its own pill so a child sees matemáticas pay off in
+        // something visibly separate from the farm economy above.
+        HudChip(emoji = "⭐", value = "${player?.mathStars ?: 0}", accent = WheatGold)
+
         val extraEarned = player?.extraFieldsEarnedToday ?: 0
         val extraUsed = player?.extraFieldsUsedToday ?: 0
         val extraRemaining = (extraEarned - extraUsed).coerceAtLeast(0)
@@ -226,8 +231,8 @@ private fun DecorationOptionRow(
 }
 
 /** Picker for the map decorations shop (founder request 2026-08-18): lists
- * every placeable [DecorationType] — only RIVER exists today — and starts
- * placement mode on tap (see FarmViewModel.startPlacingDecoration). */
+ * every placeable [DecorationType] — river, and (2026-08-18) a bear's cave —
+ * and starts placement mode on tap (see FarmViewModel.startPlacingDecoration). */
 @Composable
 fun DecorationPickerDialog(
     onDismiss: () -> Unit,
@@ -244,6 +249,7 @@ fun DecorationPickerDialog(
                     color = SoilBrown.copy(alpha = 0.8f)
                 )
                 DecorationOptionRow(emoji = "🏞️", label = "River") { onPick(DecorationType.RIVER) }
+                DecorationOptionRow(emoji = "🐻", label = "Bear cave") { onPick(DecorationType.CAVE) }
             }
         },
         confirmButton = {

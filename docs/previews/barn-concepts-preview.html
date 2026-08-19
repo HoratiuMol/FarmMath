@@ -1,0 +1,435 @@
+<title>Five Barns, Five Roofs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4efe2;
+    --panel: #fbf8f0;
+    --panel-2: #eee7d5;
+    --ink: #241f16;
+    --muted: #746b57;
+    --line: #e0d6bd;
+    --accent: #a63d2a;
+    --accent-ink: #fff8f1;
+    --ground-a: #efe9db;
+    --ground-b: #e6ddc7;
+    --shadow: 0 1px 2px rgba(36, 31, 22, 0.06), 0 8px 20px -12px rgba(36, 31, 22, 0.25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17140e; --panel: #201b13; --panel-2: #292217; --ink: #f1e9d6;
+      --muted: #a89a7d; --line: #382f20; --accent: #e0764f; --accent-ink: #241207;
+      --ground-a: #1c1710; --ground-b: #241e14;
+      --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 10px 24px -12px rgba(0,0,0,0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17140e; --panel: #201b13; --panel-2: #292217; --ink: #f1e9d6;
+    --muted: #a89a7d; --line: #382f20; --accent: #e0764f; --accent-ink: #241207;
+    --ground-a: #1c1710; --ground-b: #241e14;
+    --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 10px 24px -12px rgba(0,0,0,0.55);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4efe2; --panel: #fbf8f0; --panel-2: #eee7d5; --ink: #241f16;
+    --muted: #746b57; --line: #e0d6bd; --accent: #a63d2a; --accent-ink: #fff8f1;
+    --ground-a: #efe9db; --ground-b: #e6ddc7;
+    --shadow: 0 1px 2px rgba(36,31,22,0.06), 0 8px 20px -12px rgba(36,31,22,0.25);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Public Sans", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 1240px; margin: 0 auto; padding: 48px 28px 72px; }
+  header { display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px; max-width: 78ch; }
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 500;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif; font-size: clamp(28px, 4vw, 40px);
+    line-height: 1.06; margin: 0; font-weight: 600; text-wrap: balance; letter-spacing: -0.01em;
+  }
+  .subtitle { color: var(--muted); font-size: 14.5px; line-height: 1.6; margin: 0; }
+  .subtitle code {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px;
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+  }
+  .rig {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 16px; margin-bottom: 24px; box-shadow: var(--shadow);
+  }
+  .rig .stat {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .rig label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  input[type="range"] { accent-color: var(--accent); width: 130px; }
+  .rig .val {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    min-width: 3.6ch; color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow);
+  }
+  .card-head { display: flex; flex-direction: column; gap: 3px; }
+  .card-idx {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px;
+    color: var(--accent); letter-spacing: 0.06em;
+  }
+  .card-head h2 {
+    font-family: "Fraunces", Georgia, serif; font-size: 19px; margin: 0;
+    font-weight: 600; letter-spacing: -0.005em;
+  }
+  .card-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+  .stage { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--ground-a); }
+  canvas { display: block; width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+  .swatch-chip {
+    display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  .swatch-dot { width: 13px; height: 13px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.18); }
+  .note {
+    font-size: 12.5px; color: var(--muted); line-height: 1.65;
+    border-top: 1px solid var(--line); padding-top: 16px; margin-top: 34px; max-width: 78ch;
+  }
+  .note code {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px;
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+  }
+  footer { margin-top: 24px; font-size: 11.5px; color: var(--muted); text-align: center; }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Farm Math Builder &middot; Asset Concept</span>
+    <h1>Five barns, five roofs</h1>
+    <p class="subtitle">
+      Five buildings drawn from zero &mdash; no shared geometry with the live
+      <code>barn.obj</code>, and no two of these sharing a roof form either.
+      Each is real low-poly geometry (boxes, a cylinder, an extruded arch),
+      flat-shaded and painter&rsquo;s-algorithm sorted, the same technique the
+      game's renderer uses. Spin the shared dial to compare silhouettes.
+    </p>
+  </header>
+
+  <div class="rig">
+    <span class="stat" id="statsTag"></span>
+    <label>Turntable <input id="yawSlider" type="range" min="0" max="360" step="1" value="35" /></label>
+    <span class="val" id="yawVal">35&deg;</span>
+    <label>Light <input id="lightSlider" type="range" min="0" max="360" step="1" value="55" /></label>
+    <span class="val" id="lightVal">55&deg;</span>
+  </div>
+
+  <div class="grid" id="cardGrid"></div>
+
+  <p class="note">
+    These are concept meshes for comparing <em>shape</em>, not drop-in game
+    assets &mdash; the live barn is a Wings3D export (<code>barn.obj</code>,
+    1,657 verts). Whichever silhouette wins would still need a proper pass in
+    Wings3D (or similar) to reach that fidelity before it replaces
+    <code>domain/BarnMesh.kt</code>'s asset.
+  </p>
+
+  <footer>Farm Math Builder &middot; docs/previews/barn-concepts-preview.html</footer>
+</main>
+
+<script>
+// ---------- vector + shading helpers ----------
+function sub(a,b){ return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]; }
+function cross(u,v){ return [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]; }
+function dot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+function len(v){ return Math.hypot(v[0],v[1],v[2]) || 1; }
+function normalize(v){ const l=len(v); return [v[0]/l,v[1]/l,v[2]/l]; }
+function faceNormal(a,b,c){ return normalize(cross(sub(b,a), sub(c,a))); }
+function rotateY(p,a){ const c=Math.cos(a), s=Math.sin(a); return [p[0]*c+p[2]*s, p[1], -p[0]*s+p[2]*c]; }
+function rotateX(p,a){ const c=Math.cos(a), s=Math.sin(a); return [p[0], p[1]*c-p[2]*s, p[1]*s+p[2]*c]; }
+function shade(color, brightness){
+  const b = Math.max(0.28, Math.min(1.15, brightness));
+  return `rgb(${Math.min(255,Math.round(color[0]*b))},${Math.min(255,Math.round(color[1]*b))},${Math.min(255,Math.round(color[2]*b))})`;
+}
+function hex(c){ return '#' + c.map(x => x.toString(16).padStart(2,'0')).join('').toUpperCase(); }
+
+// ---------- procedural mesh builders (auto-orient via a reference point
+// known to sit inside the solid, so hand-picked vertex winding never has to
+// be verified face by face) ----------
+function addTriAuto(tris, a, b, c, color, ref){
+  const n = faceNormal(a,b,c);
+  const fc = [(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3];
+  if (dot(n, sub(fc, ref)) < 0) tris.push({a:a,b:c,c:b,color});
+  else tris.push({a:a,b:b,c:c,color});
+}
+function addQuadAuto(tris, p0,p1,p2,p3, color, ref){
+  addTriAuto(tris,p0,p1,p2,color,ref);
+  addTriAuto(tris,p0,p2,p3,color,ref);
+}
+function box(tris, cx,cy,cz, boxW,boxH,boxD, color){
+  const x0=cx-boxW/2,x1=cx+boxW/2, y0=cy-boxH/2,y1=cy+boxH/2, z0=cz-boxD/2,z1=cz+boxD/2;
+  const a=[x0,y0,z0], b=[x1,y0,z0], c=[x1,y1,z0], d=[x0,y1,z0];
+  const e=[x0,y0,z1], f=[x1,y0,z1], g=[x1,y1,z1], h=[x0,y1,z1];
+  const ref=[cx,cy,cz];
+  addQuadAuto(tris,e,f,g,h,color,ref);
+  addQuadAuto(tris,b,a,d,c,color,ref);
+  addQuadAuto(tris,a,e,h,d,color,ref);
+  addQuadAuto(tris,f,b,c,g,color,ref);
+  addQuadAuto(tris,d,h,g,c,color,ref);
+  addQuadAuto(tris,a,b,f,e,color,ref);
+}
+function cylinderSide(tris, cx,cy,cz, r,h, segs, color){
+  const y0=cy-h/2, y1=cy+h/2, ref=[cx,cy,cz];
+  for (let i=0;i<segs;i++){
+    const a0=i/segs*Math.PI*2, a1=(i+1)/segs*Math.PI*2;
+    const x0=cx+r*Math.cos(a0), z0=cz+r*Math.sin(a0);
+    const x1=cx+r*Math.cos(a1), z1=cz+r*Math.sin(a1);
+    addQuadAuto(tris, [x0,y0,z0],[x1,y0,z1],[x1,y1,z1],[x0,y1,z0], color, ref);
+  }
+}
+function cone(tris, cx,cy,cz, r,h, segs, color){
+  const apex=[cx,cy+h,cz], ref=[cx,cy+h*0.3,cz];
+  for (let i=0;i<segs;i++){
+    const a0=i/segs*Math.PI*2, a1=(i+1)/segs*Math.PI*2;
+    const x0=cx+r*Math.cos(a0), z0=cz+r*Math.sin(a0);
+    const x1=cx+r*Math.cos(a1), z1=cz+r*Math.sin(a1);
+    addTriAuto(tris, [x0,cy,z0],[x1,cy,z1], apex, color, ref);
+  }
+}
+// profilePts: [x,y] polyline, left eave -> ...ridge points... -> right eave,
+// both eaves at the same y (sits flush on a box's wall-top). Produces the
+// sloped roof faces plus fan-triangulated gable ends.
+function gabledRoof(tris, cx,cz, profilePts, z0,z1, roofColor, gableColor, ref){
+  const n = profilePts.length;
+  for (let i=0;i<n-1;i++){
+    const a=[cx+profilePts[i][0], profilePts[i][1], z0];
+    const b=[cx+profilePts[i+1][0], profilePts[i+1][1], z0];
+    const c=[cx+profilePts[i+1][0], profilePts[i+1][1], z1];
+    const d=[cx+profilePts[i][0], profilePts[i][1], z1];
+    addQuadAuto(tris,a,b,c,d,roofColor,ref);
+  }
+  for (const zz of [z0,z1]){
+    const p0=[cx+profilePts[0][0], profilePts[0][1], zz];
+    for (let i=1;i<n-1;i++){
+      const pi=[cx+profilePts[i][0], profilePts[i][1], zz];
+      const pi1=[cx+profilePts[i+1][0], profilePts[i+1][1], zz];
+      addTriAuto(tris,p0,pi,pi1,gableColor,ref);
+    }
+  }
+}
+
+// ---------- five designs, each an independent triangle list ----------
+const DESIGNS = [];
+
+// 01 — Classic Gambrel: the barn-red archetype, cupola + vane on the ridge.
+(function(){
+  const tris = [];
+  const wallsC=[0x8C,0x2F,0x22], roofC=[0x3B,0x3B,0x3B], trimC=[0xF3,0xEE,0xDD],
+        doorC=[0x4A,0x38,0x26], footC=[0x8C,0x85,0x77], cupolaC=[0xF3,0xEE,0xDD], vaneC=[0x17,0x15,0x12];
+  box(tris, 0,-1.05,0, 2.9,0.2,2.3, footC);
+  box(tris, 0,0.05,0, 2.7,1.9,2.1, wallsC);
+  addQuadAuto(tris, [-0.55,-0.95,1.051],[0.55,-0.95,1.051],[0.55,0.85,1.051],[-0.55,0.85,1.051], doorC, [0,0,0]);
+  gabledRoof(tris, 0,0, [[-1.4,1.0],[-1.0,1.55],[0,1.95],[1.0,1.55],[1.4,1.0]], -1.05,1.05, roofC, trimC, [0,0.9,0]);
+  box(tris, 0,2.05,0, 0.55,0.5,0.55, cupolaC);
+  box(tris, 0,2.42,0, 0.65,0.16,0.65, roofC);
+  box(tris, 0,2.75,0, 0.05,0.5,0.05, vaneC);
+  addTriAuto(tris, [0,2.95,0],[0.32,2.86,0],[0,2.86,0.24], vaneC, [0,2.9,0.08]);
+  DESIGNS.push({
+    name: 'Classic Gambrel', tris,
+    legend: [['Walls',wallsC],['Roof',roofC],['Trim',trimC],['Door',doorC]],
+    desc: 'The archetype: barn red, a two-pitch gambrel roof for extra hayloft headroom, cupola and vane on the ridge.'
+  });
+})();
+
+// 02 — Round Silo Barn: cylindrical wall, conical roof, historic Midwest form.
+(function(){
+  const tris = [];
+  const wallsC=[0xE9,0xE4,0xD6], roofC=[0x6E,0x2A,0x22], footC=[0x5B,0x56,0x4A], cupolaC=[0xE9,0xE4,0xD6];
+  box(tris, 0,-1.05,0, 3.0,0.2,3.0, footC);
+  cylinderSide(tris, 0,0.0,0, 1.35,2.0, 20, wallsC);
+  cone(tris, 0,1.0,0, 1.35,1.15, 20, roofC);
+  cylinderSide(tris, 0,2.28,0, 0.32,0.28, 12, cupolaC);
+  cone(tris, 0,2.42,0, 0.32,0.45, 12, roofC);
+  DESIGNS.push({
+    name: 'Round Silo Barn', tris,
+    legend: [['Walls',wallsC],['Roof',roofC],['Foundation',footC]],
+    desc: 'A historic round barn: cylindrical wall under a single cone, cheaper to frame per bushel of hay stored than a square one.'
+  });
+})();
+
+// 03 — Gothic Arch Dairy Barn: short walls, a pointed arch roof from 9 ribs.
+(function(){
+  const tris = [];
+  const wallsC=[0x2E,0x46,0x32], roofC=[0xB8,0xBE,0xC2], footC=[0x3A,0x36,0x2E];
+  box(tris, 0,-1.05,0, 2.9,0.2,2.5, footC);
+  box(tris, 0,-0.75,0, 2.7,0.6,2.3, wallsC);
+  const arch = [];
+  const half=1.35, eaveY=-0.45, apexRise=1.85, n=8;
+  for (let i=0;i<=n;i++){
+    const t = i/n; // 0..1 left to right
+    const x = -half + t*half*2;
+    // sin(t*pi) is 0 at both eaves and 1 at center, like a rounded arch; a
+    // fractional power keeps it 0 at the eaves (so it never dips below the
+    // wall top) while pulling the shoulders up faster for a pointed profile.
+    const bulge = Math.pow(Math.sin(t*Math.PI), 0.6);
+    const y = eaveY + bulge*apexRise;
+    arch.push([x, y]);
+  }
+  gabledRoof(tris, 0,0, arch, -1.15,1.15, roofC, wallsC, [0,0.4,0]);
+  DESIGNS.push({
+    name: 'Gothic Arch Dairy Barn', tris,
+    legend: [['Walls',wallsC],['Roof (galvanized)',roofC],['Foundation',footC]],
+    desc: 'Short walls, tall pointed-arch roof built from ribs, no interior truss needed — the 1930s dairy-barn standard.'
+  });
+})();
+
+// 04 — Modern Mono-pitch: minimalist black shed, one slope, mustard door.
+(function(){
+  const tris = [];
+  const wallsC=[0x1E,0x1E,0x1E], roofC=[0x34,0x34,0x34], doorC=[0xD2,0x93,0x2F], footC=[0xA9,0xA3,0x98];
+  const z0=-1.1, z1=1.1, xL=-1.4, xR=1.4, yLo=0, yHiL=1.65, yHiR=0.85;
+  box(tris, 0,-1.05,0, 3.0,0.2,2.4, footC);
+  addQuadAuto(tris, [xL,yLo,z1],[xR,yLo,z1],[xR,yHiR,z1],[xL,yHiL,z1], wallsC, [0,0.6,0]);
+  addQuadAuto(tris, [xR,yLo,z0],[xL,yLo,z0],[xL,yHiL,z0],[xR,yHiR,z0], wallsC, [0,0.6,0]);
+  addQuadAuto(tris, [xL,yLo,z0],[xL,yLo,z1],[xL,yHiL,z1],[xL,yHiL,z0], wallsC, [0,0.6,0]);
+  addQuadAuto(tris, [xR,yLo,z1],[xR,yLo,z0],[xR,yHiR,z0],[xR,yHiR,z1], wallsC, [0,0.6,0]);
+  addQuadAuto(tris, [xL,yHiL,z0],[xL,yHiL,z1],[xR,yHiR,z1],[xR,yHiR,z0], roofC, [0,0.6,0]);
+  addQuadAuto(tris, [-0.6,yLo,z1+0.001],[0.6,yLo,z1+0.001],[0.6,1.05,z1+0.001],[-0.6,1.15,z1+0.001], doorC, [0,0,z1]);
+  DESIGNS.push({
+    name: 'Modern Mono-pitch', tris,
+    legend: [['Walls (steel)',wallsC],['Roof',roofC],['Door',doorC],['Foundation',footC]],
+    desc: 'A single slope, matte black steel siding, one mustard sliding door — the contemporary pole-barn read.'
+  });
+})();
+
+// 05 — Saltbox with Lean-to: off-centre ridge plus a small attached shed.
+(function(){
+  const tris = [];
+  const wallsC=[0x5C,0x72,0x85], roofC=[0x7A,0x3B,0x2E], trimC=[0xEF,0xEA,0xD9], footC=[0x83,0x7C,0x6C],
+        leanWallC=[0x71,0x87,0x9B];
+  box(tris, 0.1,-1.05,0, 3.0,0.2,2.2, footC);
+  box(tris, 0.1,0.0,0, 2.6,1.8,2.0, wallsC);
+  addQuadAuto(tris, [-0.55,-0.55,1.001],[0.15,-0.55,1.001],[0.15,0.35,1.001],[-0.55,0.35,1.001], trimC, [0.1,0,0]);
+  gabledRoof(tris, 0.1,0, [[-1.3,0.9],[-0.4,1.65],[1.3,0.9]], -1.1,1.1, roofC, trimC, [0.1,0.8,0]);
+  // lean-to addition on the right side
+  const lz0=-1.0, lz1=1.0, lx0=1.4, lx1=2.3, lyLo=-0.9, lyHiL=1.0, lyHiR=0.15;
+  addQuadAuto(tris, [lx0,lyLo,lz1],[lx1,lyLo,lz1],[lx1,lyHiR,lz1],[lx0,lyHiL,lz1], leanWallC, [1.85,0.0,0]);
+  addQuadAuto(tris, [lx1,lyLo,lz0],[lx0,lyLo,lz0],[lx0,lyHiL,lz0],[lx1,lyHiR,lz0], leanWallC, [1.85,0.0,0]);
+  addQuadAuto(tris, [lx1,lyLo,lz1],[lx1,lyLo,lz0],[lx1,lyHiR,lz0],[lx1,lyHiR,lz1], leanWallC, [1.85,0.0,0]);
+  addQuadAuto(tris, [lx0,lyHiL,lz0],[lx0,lyHiL,lz1],[lx1,lyHiR,lz1],[lx1,lyHiR,lz0], roofC, [1.85,0.0,0]);
+  DESIGNS.push({
+    name: 'Saltbox with Lean-to', tris,
+    legend: [['Walls',wallsC],['Lean-to',leanWallC],['Roof',roofC],['Trim',trimC]],
+    desc: 'Off-centre ridge for a long, low rear slope, plus a small lean-to tacked on — the look of a barn that grew over time.'
+  });
+})();
+
+// ---------- shared render rig ----------
+let totalTris = 0;
+DESIGNS.forEach(d => totalTris += d.tris.length);
+document.getElementById('statsTag').textContent = DESIGNS.length + ' concepts · ' + totalTris + ' triangles total';
+
+const grid = document.getElementById('cardGrid');
+const cards = DESIGNS.map((design, i) => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const legendHtml = design.legend.map(([label, c]) =>
+    `<span class="swatch-chip"><span class="swatch-dot" style="background:${hex(c)}"></span>${label} ${hex(c)}</span>`
+  ).join('');
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="card-idx">0${i + 1}</span>
+      <h2>${design.name}</h2>
+    </div>
+    <p class="card-desc">${design.desc}</p>
+    <div class="stage"><canvas width="620" height="460"></canvas></div>
+    <div class="legend">${legendHtml}</div>
+  `;
+  grid.appendChild(card);
+  const canvas = card.querySelector('canvas');
+  return { canvas, ctx: canvas.getContext('2d'), tris: design.tris };
+});
+
+const yawSlider = document.getElementById('yawSlider');
+const yawVal = document.getElementById('yawVal');
+const lightSlider = document.getElementById('lightSlider');
+const lightVal = document.getElementById('lightVal');
+const pitch = 0.56;
+
+function drawGround(ctx, canvas){
+  const style = getComputedStyle(document.documentElement);
+  const a = style.getPropertyValue('--ground-a').trim();
+  const bcol = style.getPropertyValue('--ground-b').trim();
+  ctx.fillStyle = a;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle = bcol;
+  ctx.lineWidth = 1;
+  const step = 34;
+  for (let x=-canvas.height; x<canvas.width+canvas.height; x+=step){
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+canvas.height,canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,canvas.height); ctx.lineTo(x+canvas.height,0); ctx.stroke();
+  }
+}
+
+function bounds(tris){
+  let min=[Infinity,Infinity,Infinity], max=[-Infinity,-Infinity,-Infinity];
+  for (const t of tris) for (const v of [t.a,t.b,t.c]) for (let k=0;k<3;k++){
+    if (v[k]<min[k]) min[k]=v[k];
+    if (v[k]>max[k]) max[k]=v[k];
+  }
+  const center=[0,1,2].map(k=>(min[k]+max[k])/2);
+  const extent=Math.max(...[0,1,2].map(k=>max[k]-min[k]));
+  return { center, extent };
+}
+
+function project(p, center, extent, yaw, canvas, scale){
+  let v = sub(p, center);
+  v = rotateY(v, yaw);
+  v = rotateX(v, pitch);
+  const s = (scale * Math.min(canvas.width, canvas.height)) / extent;
+  return { x: canvas.width/2 + v[0]*s, y: canvas.height*0.66 - v[1]*s, z: v[2] };
+}
+
+function renderAll(){
+  const yawDeg = parseFloat(yawSlider.value);
+  yawVal.textContent = Math.round(yawDeg) + '°';
+  const yaw = (yawDeg*Math.PI)/180;
+  const lightDeg = parseFloat(lightSlider.value);
+  lightVal.textContent = Math.round(lightDeg) + '°';
+  const lightRad = (lightDeg*Math.PI)/180;
+  const lightDir = normalize([Math.cos(lightRad), 0.9, Math.sin(lightRad)]);
+
+  for (const { canvas, ctx, tris } of cards){
+    drawGround(ctx, canvas);
+    const { center, extent } = bounds(tris);
+    const drawList = [];
+    for (const t of tris){
+      const pa = project(t.a, center, extent, yaw, canvas, 0.46);
+      const pb = project(t.b, center, extent, yaw, canvas, 0.46);
+      const pc = project(t.c, center, extent, yaw, canvas, 0.46);
+      const depth = (pa.z+pb.z+pc.z)/3;
+      const normal = faceNormal(t.a,t.b,t.c);
+      const facing = rotateX(rotateY(normal, yaw), pitch);
+      const brightness = 0.35 + Math.max(0, dot(facing, lightDir))*0.85;
+      drawList.push({ pa,pb,pc, color:t.color, brightness, depth });
+    }
+    drawList.sort((x,y) => x.depth - y.depth);
+    for (const t of drawList){
+      ctx.beginPath();
+      ctx.moveTo(t.pa.x, t.pa.y);
+      ctx.lineTo(t.pb.x, t.pb.y);
+      ctx.lineTo(t.pc.x, t.pc.y);
+      ctx.closePath();
+      ctx.fillStyle = shade(t.color, t.brightness);
+      ctx.fill();
+    }
+  }
+}
+
+yawSlider.addEventListener('input', renderAll);
+lightSlider.addEventListener('input', renderAll);
+renderAll();
+</script>
